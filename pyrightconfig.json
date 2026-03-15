@@ -1,0 +1,12 @@
+{
+    "include": [
+        "c:/Users/flori/Desktop/Meine software projekte/TankRadar"
+    ],
+    "extraPaths": [
+        "c:/Users/flori/Desktop/Meine software projekte/TankRadar",
+        "C:/Users/flori/AppData/Roaming/Python/Python311/site-packages"
+    ],
+    "typeCheckingMode": "basic",
+    "pythonVersion": "3.11",
+    "pythonPlatform": "Windows"
+}
