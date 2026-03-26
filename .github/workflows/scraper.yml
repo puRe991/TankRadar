@@ -28,6 +28,10 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+
+          # Erst pullen, DANN committen – so ist der Push immer aktuell
+          git pull --rebase origin main
+
           git add prices_history.csv
 
           if git diff --staged --quiet; then
@@ -36,12 +40,5 @@ jobs:
           fi
 
           git commit -m "Update fuel prices: $(date -u)"
-
-          for i in 1 2 3; do
-            if git pull --rebase origin main && git push; then
-              echo "Push erfolgreich (Versuch $i)."
-              break
-            fi
-            echo "Push fehlgeschlagen (Versuch $i/3), warte 5s..."
-            sleep 5
-          done
+          git push
+```
