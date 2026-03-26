@@ -25,21 +25,21 @@ jobs:
         run: python cloud_scraper.py
 
       - name: Commit and push changes
-  run: |
-    git config --local user.email "action@github.com"
-    git config --local user.name "GitHub Action"
-    
-    git add prices_history.csv
-    
-    if git diff --staged --quiet; then
-      echo "Keine Änderungen – kein Commit nötig."
-      exit 0
-    fi
-    
-    git commit -m "Update fuel prices: $(date -u)"
-    
-    # Pull with rebase to integrate remote changes
-    git pull --rebase origin main
-    
-    # Push with retry logic
-    git push || (git pull --rebase origin main && git push)
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          git add prices_history.csv
+          
+          if git diff --staged --quiet; then
+            echo "Keine Änderungen – kein Commit nötig."
+            exit 0
+          fi
+          
+          git commit -m "Update fuel prices: $(date -u)"
+          
+          # Pull with rebase to integrate remote changes
+          git pull --rebase origin main
+          
+          # Push with retry logic
+          git push || (git pull --rebase origin main && git push)
