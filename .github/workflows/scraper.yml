@@ -4,6 +4,10 @@ on:
     - cron: '*/30 * * * *'
   workflow_dispatch:
 
+concurrency:
+  group: scraper
+  cancel-in-progress: false
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
@@ -29,6 +33,10 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
+          # Zuerst pullen, um remote changes zu integrieren
+          git fetch origin
+          git pull --rebase origin main || true
+          
           git add prices_history.csv
           
           if git diff --staged --quiet; then
@@ -38,8 +46,8 @@ jobs:
           
           git commit -m "Update fuel prices: $(date -u)"
           
-          # Pull with rebase to integrate remote changes
-          git pull --rebase origin main
+          # Nochmal vor Push pullen für safety
+          git pull --rebase origin main || true
           
-          # Push with retry logic
+          # Push mit retry logic
           git push || (git pull --rebase origin main && git push)
