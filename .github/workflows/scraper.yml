@@ -1,9 +1,8 @@
 name: TankRadar Cloud Scraper
-
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Run every 30 minutes
-  workflow_dispatch:      # Allow manual trigger
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
 
 jobs:
   scrape:
@@ -22,7 +21,7 @@ jobs:
 
       - name: Run scraper
         env:
-          TANKRADAR_PLZ: '35444' # Set your PLZ here
+          TANKRADAR_PLZ: '35444'
         run: python cloud_scraper.py
 
       - name: Commit and push changes
@@ -30,5 +29,16 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add prices_history.csv
-          git commit -m "Update fuel prices: $(date)" || echo "No changes to commit"
-          git push
+
+          if git diff --staged --quiet; then
+            echo "Keine Änderungen – kein Commit nötig."
+            exit 0
+          fi
+
+          git commit -m "Update fuel prices: $(date -u)"
+
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && break
+            echo "Push fehlgeschlagen (Versuch $i/3), warte 5s..."
+            sleep 5
+          done
