@@ -21192,3 +21192,53 @@ id,station_id,timestamp,fuel_type,price,latitude,longitude,previous_price
 2026-04-07T11:07:38,1238450,ARAL Wettenberg,ARAL,Wettenberg,diesel,2.529
 2026-04-07T11:07:38,1240297,Mengin Biebertal-Rodheim,Mengin,Biebertal-Rodheim,diesel,2.569
 2026-04-07T11:07:38,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,diesel,2.579
+2026-04-07T12:09:31,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e5,2.229
+2026-04-07T12:09:31,1806060,Q1 Lollar,Q1,Lollar,e5,2.229
+2026-04-07T12:09:31,1240122,PT Tankstelle Becker Wettenberg,PT Tankstelle Becker,Wettenberg,e5,2.249
+2026-04-07T12:09:31,1243863,JET GIESSEN,JET,GIESSEN,e5,2.269
+2026-04-07T12:09:31,1240921,Roth- Energie Gießen,Roth- Energie,Gießen,e5,2.269
+2026-04-07T12:09:31,1241880,Access Heuchelheim,Access,Heuchelheim,e5,2.269
+2026-04-07T12:09:31,1244121,JET HEUCHELHEIM,JET,HEUCHELHEIM,e5,2.269
+2026-04-07T12:09:31,1247288,Roth Energie & Tankstop Best Lahnau Waldgirmes,Roth Energie & Tankstop Best,Lahnau Waldgirmes,e5,2.269
+2026-04-07T12:09:31,1240297,Mengin Biebertal-Rodheim,Mengin,Biebertal-Rodheim,e5,2.269
+2026-04-07T12:09:31,1243122,Jung Bischoffen,Jung,Bischoffen,e5,2.274
+2026-04-07T12:09:31,1244308,Esso Hohenahr,Esso,Hohenahr,e5,2.279
+2026-04-07T12:09:31,1235075,ARAL Lahnau,ARAL,Lahnau,e5,2.289
+2026-04-07T12:09:31,1238450,ARAL Wettenberg,ARAL,Wettenberg,e5,2.289
+2026-04-07T12:09:31,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e10,2.169
+2026-04-07T12:09:31,1806060,Q1 Lollar,Q1,Lollar,e10,2.169
+2026-04-07T12:09:31,1243863,JET GIESSEN,JET,GIESSEN,e10,2.209
+2026-04-07T12:09:31,1240921,Roth- Energie Gießen,Roth- Energie,Gießen,e10,2.209
+2026-04-07T12:09:31,1241880,Access Heuchelheim,Access,Heuchelheim,e10,2.209
+2026-04-07T12:09:31,1244121,JET HEUCHELHEIM,JET,HEUCHELHEIM,e10,2.209
+2026-04-07T12:09:31,1247288,Roth Energie & Tankstop Best Lahnau Waldgirmes,Roth Energie & Tankstop Best,Lahnau Waldgirmes,e10,2.209
+2026-04-07T12:09:31,1240297,Mengin Biebertal-Rodheim,Mengin,Biebertal-Rodheim,e10,2.209
+2026-04-07T12:09:31,1243122,Jung Bischoffen,Jung,Bischoffen,e10,2.214
+2026-04-07T12:09:31,1244308,Esso Hohenahr,Esso,Hohenahr,e10,2.219
+2026-04-07T12:09:31,1235075,ARAL Lahnau,ARAL,Lahnau,e10,2.229
+2026-04-07T12:09:31,1238450,ARAL Wettenberg,ARAL,Wettenberg,e10,2.229
+2026-04-07T12:09:31,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e5p,2.169
+2026-04-07T12:09:31,1806060,Q1 Lollar,Q1,Lollar,e5p,2.169
+2026-04-07T12:09:31,1243863,JET GIESSEN,JET,GIESSEN,e5p,2.209
+2026-04-07T12:09:31,1240921,Roth- Energie Gießen,Roth- Energie,Gießen,e5p,2.209
+2026-04-07T12:09:31,1241880,Access Heuchelheim,Access,Heuchelheim,e5p,2.209
+2026-04-07T12:09:31,1244121,JET HEUCHELHEIM,JET,HEUCHELHEIM,e5p,2.209
+2026-04-07T12:09:31,1247288,Roth Energie & Tankstop Best Lahnau Waldgirmes,Roth Energie & Tankstop Best,Lahnau Waldgirmes,e5p,2.209
+2026-04-07T12:09:31,1240297,Mengin Biebertal-Rodheim,Mengin,Biebertal-Rodheim,e5p,2.209
+2026-04-07T12:09:31,1243122,Jung Bischoffen,Jung,Bischoffen,e5p,2.214
+2026-04-07T12:09:31,1244308,Esso Hohenahr,Esso,Hohenahr,e5p,2.219
+2026-04-07T12:09:31,1235075,ARAL Lahnau,ARAL,Lahnau,e5p,2.229
+2026-04-07T12:09:31,1238450,ARAL Wettenberg,ARAL,Wettenberg,e5p,2.229
+2026-04-07T12:09:31,1240122,PT Tankstelle Becker Wettenberg,PT Tankstelle Becker,Wettenberg,diesel,2.399
+2026-04-07T12:09:31,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,diesel,2.429
+2026-04-07T12:09:31,1806060,Q1 Lollar,Q1,Lollar,diesel,2.429
+2026-04-07T12:09:31,1240921,Roth- Energie Gießen,Roth- Energie,Gießen,diesel,2.439
+2026-04-07T12:09:31,1244308,Esso Hohenahr,Esso,Hohenahr,diesel,2.439
+2026-04-07T12:09:31,1243122,Jung Bischoffen,Jung,Bischoffen,diesel,2.454
+2026-04-07T12:09:31,1247288,Roth Energie & Tankstop Best Lahnau Waldgirmes,Roth Energie & Tankstop Best,Lahnau Waldgirmes,diesel,2.459
+2026-04-07T12:09:31,1243863,JET GIESSEN,JET,GIESSEN,diesel,2.469
+2026-04-07T12:09:31,1244121,JET HEUCHELHEIM,JET,HEUCHELHEIM,diesel,2.469
+2026-04-07T12:09:31,1240297,Mengin Biebertal-Rodheim,Mengin,Biebertal-Rodheim,diesel,2.469
+2026-04-07T12:09:31,1241880,Access Heuchelheim,Access,Heuchelheim,diesel,2.479
+2026-04-07T12:09:31,1235075,ARAL Lahnau,ARAL,Lahnau,diesel,2.529
+2026-04-07T12:09:31,1238450,ARAL Wettenberg,ARAL,Wettenberg,diesel,2.529
