@@ -31131,3 +31131,35 @@ id,station_id,timestamp,fuel_type,price,latitude,longitude,previous_price
 2026-04-21T20:10:12,1244121,JET HEUCHELHEIM,JET,HEUCHELHEIM,diesel,2.119
 2026-04-21T20:10:12,1240297,Mengin Biebertal-Rodheim,Mengin,Biebertal-Rodheim,diesel,2.119
 2026-04-21T20:10:12,1238450,ARAL Wettenberg,ARAL,Wettenberg,diesel,2.129
+2026-04-21T21:23:11,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e5,2.069
+2026-04-21T21:23:11,1240921,Roth- Energie Gießen,Roth- Energie,Gießen,e5,2.069
+2026-04-21T21:23:11,1806060,Q1 Lollar,Q1,Lollar,e5,2.069
+2026-04-21T21:23:11,1247288,Roth Energie & Tankstop Best Lahnau Waldgirmes,Roth Energie & Tankstop Best,Lahnau Waldgirmes,e5,2.069
+2026-04-21T21:23:11,1240297,Mengin Biebertal-Rodheim,Mengin,Biebertal-Rodheim,e5,2.069
+2026-04-21T21:23:11,1238450,ARAL Wettenberg,ARAL,Wettenberg,e5,2.079
+2026-04-21T21:23:11,1243122,Jung Bischoffen,Jung,Bischoffen,e5,2.084
+2026-04-21T21:23:11,1244308,Esso Hohenahr,Esso,Hohenahr,e5,2.089
+2026-04-21T21:23:11,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e10,2.009
+2026-04-21T21:23:11,1240921,Roth- Energie Gießen,Roth- Energie,Gießen,e10,2.009
+2026-04-21T21:23:11,1806060,Q1 Lollar,Q1,Lollar,e10,2.009
+2026-04-21T21:23:11,1247288,Roth Energie & Tankstop Best Lahnau Waldgirmes,Roth Energie & Tankstop Best,Lahnau Waldgirmes,e10,2.009
+2026-04-21T21:23:11,1240297,Mengin Biebertal-Rodheim,Mengin,Biebertal-Rodheim,e10,2.009
+2026-04-21T21:23:11,1238450,ARAL Wettenberg,ARAL,Wettenberg,e10,2.019
+2026-04-21T21:23:11,1243122,Jung Bischoffen,Jung,Bischoffen,e10,2.024
+2026-04-21T21:23:11,1244308,Esso Hohenahr,Esso,Hohenahr,e10,2.029
+2026-04-21T21:23:11,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e5p,2.009
+2026-04-21T21:23:11,1240921,Roth- Energie Gießen,Roth- Energie,Gießen,e5p,2.009
+2026-04-21T21:23:11,1806060,Q1 Lollar,Q1,Lollar,e5p,2.009
+2026-04-21T21:23:11,1247288,Roth Energie & Tankstop Best Lahnau Waldgirmes,Roth Energie & Tankstop Best,Lahnau Waldgirmes,e5p,2.009
+2026-04-21T21:23:11,1240297,Mengin Biebertal-Rodheim,Mengin,Biebertal-Rodheim,e5p,2.009
+2026-04-21T21:23:11,1238450,ARAL Wettenberg,ARAL,Wettenberg,e5p,2.019
+2026-04-21T21:23:11,1243122,Jung Bischoffen,Jung,Bischoffen,e5p,2.024
+2026-04-21T21:23:11,1244308,Esso Hohenahr,Esso,Hohenahr,e5p,2.029
+2026-04-21T21:23:11,1243122,Jung Bischoffen,Jung,Bischoffen,diesel,2.074
+2026-04-21T21:23:11,1244308,Esso Hohenahr,Esso,Hohenahr,diesel,2.079
+2026-04-21T21:23:11,1247288,Roth Energie & Tankstop Best Lahnau Waldgirmes,Roth Energie & Tankstop Best,Lahnau Waldgirmes,diesel,2.089
+2026-04-21T21:23:11,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,diesel,2.119
+2026-04-21T21:23:11,1240921,Roth- Energie Gießen,Roth- Energie,Gießen,diesel,2.119
+2026-04-21T21:23:11,1806060,Q1 Lollar,Q1,Lollar,diesel,2.119
+2026-04-21T21:23:11,1240297,Mengin Biebertal-Rodheim,Mengin,Biebertal-Rodheim,diesel,2.119
+2026-04-21T21:23:11,1238450,ARAL Wettenberg,ARAL,Wettenberg,diesel,2.129
