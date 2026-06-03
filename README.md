@@ -24,3 +24,10 @@ TankRadar is a production-ready Python application that monitors real-time gasol
 1. **Install Dependencies**:
    ```bash
    pip install -r requirements.txt
+   ```
+
+## Preisänderungs-Prüffälle
+
+Die Ansicht **Preis-Prüffälle** dokumentiert tatsächliche Änderungen eines Kraftstoffpreises nach 12:00 Uhr für die letzten 30 Tage. Sie zeigt Vorgangsnummer, sekundengenauen Zeitpunkt, Tankstelle, Anschrift, Kraftstoffart, Vorpreis, neuen Preis, Differenz und – soweit vorhanden – Koordinaten. Über **Beschwerdeanlage als PDF** können dieselben Nachweisdaten als neutrale Anlage exportiert werden.
+
+Eine Preisänderung nach 12:00 Uhr wird dabei ausdrücklich nur als Prüffall markiert; die zeitliche Einordnung allein ist kein Nachweis eines Rechtsverstoßes.
