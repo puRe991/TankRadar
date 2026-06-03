@@ -7,6 +7,7 @@ from datetime import datetime
 import config
 
 # Setup professional logging
+os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
@@ -203,6 +204,27 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error fetching historical data for {station_id}: {e}")
             return pd.DataFrame(columns=[c.name for c in FuelPrice.__table__.columns])
+        finally:
+            session.close()
+
+    def get_price_change_cases(self, cutoff_hour=12, days=30, now=None):
+        """Return changed prices after the cutoff, enriched with station details."""
+        from compliance_report import detect_price_change_cases
+
+        session = self.Session()
+        try:
+            price_rows = [
+                {column.name: getattr(item, column.name) for column in FuelPrice.__table__.columns}
+                for item in session.query(FuelPrice).order_by(FuelPrice.timestamp.asc()).all()
+            ]
+            stations = [
+                {column.name: getattr(item, column.name) for column in Station.__table__.columns}
+                for item in session.query(Station).all()
+            ]
+            return detect_price_change_cases(price_rows, stations, cutoff_hour=cutoff_hour, days=days, now=now)
+        except Exception as e:
+            logger.error(f"Error fetching price change cases: {e}")
+            return detect_price_change_cases([], [], cutoff_hour=cutoff_hour, days=days, now=now)
         finally:
             session.close()
 

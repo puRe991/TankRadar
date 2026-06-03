@@ -10,6 +10,7 @@ from adac_scraper import ADACScraper
 from analysis_engine import AnalysisEngine
 from prediction_model import FuelPredictionModel
 from autostart_manager import AutostartManager
+from compliance_report import FUEL_LABELS, build_complaint_pdf, format_address
 import config
 from datetime import datetime
 import time
@@ -67,7 +68,8 @@ class TankRadarDashboard:
                 html.Div(className='sidebar-navigation', style={'marginTop': '20px'}, children=[
                     html.P("Ansicht", className='input-label'),
                     html.Button("🔍 Radar", id='btn-nav-radar', className='btn-primary', style={'width': '100%', 'marginBottom': '10px'}),
-                    html.Button("📖 Tank-Tagebuch", id='btn-nav-logbook', className='btn-secondary', style={'width': '100%'})
+                    html.Button("📖 Tank-Tagebuch", id='btn-nav-logbook', className='btn-secondary', style={'width': '100%', 'marginBottom': '10px'}),
+                    html.Button("⚠️ Preis-Prüffälle", id='btn-nav-compliance', className='btn-secondary', style={'width': '100%'})
                 ]),
 
                 dcc.Store(id='current-view-store', data='radar'),
@@ -213,6 +215,26 @@ class TankRadarDashboard:
                     html.Div(className='glass-card', style={'marginTop': '20px', 'overflowX': 'auto'}, children=[
                         html.Div(id='logbook-table-container')
                     ])
+                ]),
+
+                # --- PRICE CHANGE COMPLIANCE VIEW ---
+                html.Div(id='view-compliance', style={'display': 'none'}, children=[
+                    html.Div(className='compliance-header', children=[
+                        html.Div(children=[
+                            html.H1("⚠️ Preisänderungs-Prüffälle", style={'margin': '0', 'fontSize': '2rem'}),
+                            html.P("Dokumentiert tatsächliche Preisänderungen nach 12:00 Uhr als neutrale Prüffälle.", className='compliance-subtitle'),
+                        ]),
+                        html.Button("📄 Beschwerdeanlage als PDF", id='download-compliance-pdf', className='btn-primary', style={'padding': '12px 24px'})
+                    ]),
+                    html.Div(className='legal-notice', children=[
+                        html.Strong("Wichtiger Hinweis: "),
+                        "Eine Preisänderung nach 12:00 Uhr ist nicht automatisch rechtswidrig. TankRadar sammelt die Nachweisdaten für eine sachliche Prüfung oder Beschwerde."
+                    ]),
+                    html.Div(id='compliance-kpi-row', className='metric-row'),
+                    html.Div(className='glass-card compliance-card', children=[
+                        html.Div(id='compliance-table-container')
+                    ]),
+                    dcc.Download(id='compliance-pdf-download')
                 ]),
 
                 # Hidden state for selected station
@@ -844,22 +866,74 @@ class TankRadarDashboard:
         @self.app.callback(
             [Output('view-radar', 'style'),
              Output('view-logbook', 'style'),
+             Output('view-compliance', 'style'),
              Output('current-view-store', 'data')],
             [Input('btn-nav-radar', 'n_clicks'),
-             Input('btn-nav-logbook', 'n_clicks')],
+             Input('btn-nav-logbook', 'n_clicks'),
+             Input('btn-nav-compliance', 'n_clicks')],
             prevent_initial_call=False
         )
-        def switch_view(btn_radar, btn_logbook):
+        def switch_view(btn_radar, btn_logbook, btn_compliance):
             ctx = callback_context
             if not ctx.triggered:
-                return {'display': 'block'}, {'display': 'none'}, 'radar'
-                
+                return {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, 'radar'
+
             button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-            
             if button_id == 'btn-nav-logbook':
-                return {'display': 'none'}, {'display': 'block'}, 'logbook'
-            else:
-                return {'display': 'block'}, {'display': 'none'}, 'radar'
+                return {'display': 'none'}, {'display': 'block'}, {'display': 'none'}, 'logbook'
+            if button_id == 'btn-nav-compliance':
+                return {'display': 'none'}, {'display': 'none'}, {'display': 'block'}, 'compliance'
+            return {'display': 'block'}, {'display': 'none'}, {'display': 'none'}, 'radar'
+
+        # --- Price change compliance callbacks ---
+        @self.app.callback(
+            [Output('compliance-table-container', 'children'),
+             Output('compliance-kpi-row', 'children')],
+            [Input('current-view-store', 'data'), Input('interval-component', 'n_intervals')]
+        )
+        def update_compliance_view(view_state, _):
+            if view_state != 'compliance':
+                return dash.no_update, dash.no_update
+            cases = self.db.get_price_change_cases(cutoff_hour=12, days=30)
+            kpis = [
+                html.Div(className='metric-item', children=[html.Div(str(len(cases)), className='metric-value'), html.Div("Prüffälle (30 Tage)", className='metric-label')]),
+                html.Div(className='metric-item', children=[html.Div(str(cases['station_id'].nunique()) if not cases.empty else "0", className='metric-value'), html.Div("Betroffene Tankstellen", className='metric-label')]),
+                html.Div(className='metric-item', children=[html.Div(f"{cases['difference'].abs().max():.3f} €/L" if not cases.empty else "0.000 €/L", className='metric-value'), html.Div("Größte Änderung", className='metric-label')]),
+            ]
+            if cases.empty:
+                return html.Div("Keine Preisänderungs-Prüffälle nach 12:00 Uhr in den letzten 30 Tagen.", className='empty-state'), kpis
+
+            display = cases.copy()
+            display['Zeitpunkt'] = display['timestamp'].map(lambda value: pd.Timestamp(value).strftime('%d.%m.%Y %H:%M:%S'))
+            display['Tankstelle'] = display.apply(lambda row: f"{row.get('brand') or ''} {row.get('station_name') or ''}".strip(), axis=1)
+            display['Anschrift'] = display.apply(format_address, axis=1)
+            display['Sorte'] = display['fuel_type'].replace(FUEL_LABELS).fillna(display['fuel_type'].str.upper())
+            display['Vorher'] = display['previous_price'].map(lambda value: f"{value:.3f} €/L")
+            display['Neuer Preis'] = display['price'].map(lambda value: f"{value:.3f} €/L")
+            display['Änderung'] = display['difference'].map(lambda value: f"{value:+.3f} €/L")
+            display['Koordinaten'] = display.apply(lambda row: f"{row['latitude']:.6f}, {row['longitude']:.6f}" if pd.notna(row['latitude']) and pd.notna(row['longitude']) else "–", axis=1)
+            columns = ['event_id', 'Zeitpunkt', 'Tankstelle', 'Anschrift', 'Sorte', 'Vorher', 'Neuer Preis', 'Änderung', 'Koordinaten']
+            table = dash_table.DataTable(
+                data=display[columns].to_dict('records'),
+                columns=[{'name': 'Vorgang', 'id': 'event_id'}] + [{'name': name, 'id': name} for name in columns[1:]],
+                page_size=15, sort_action='native', filter_action='native',
+                style_table={'overflowX': 'auto'},
+                style_header={'backgroundColor': '#102a43', 'color': 'white', 'fontWeight': 'bold', 'padding': '12px'},
+                style_cell={'backgroundColor': 'transparent', 'color': '#d0d0e0', 'borderBottom': '1px solid rgba(255,255,255,0.08)', 'padding': '12px', 'textAlign': 'left', 'minWidth': '110px', 'whiteSpace': 'normal'},
+                style_data_conditional=[{'if': {'filter_query': '{Änderung} contains "+"', 'column_id': 'Änderung'}, 'color': '#ff6b9d', 'fontWeight': 'bold'}]
+            )
+            return table, kpis
+
+        @self.app.callback(
+            Output('compliance-pdf-download', 'data'),
+            Input('download-compliance-pdf', 'n_clicks'),
+            prevent_initial_call=True
+        )
+        def download_compliance_report(n_clicks):
+            cases = self.db.get_price_change_cases(cutoff_hour=12, days=30)
+            pdf = build_complaint_pdf(cases, cutoff_hour=12)
+            filename = f"TankRadar_Beschwerdeanlage_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.pdf"
+            return dcc.send_bytes(pdf, filename)
 
         # --- Add Refuel Modal Callbacks ---
         @self.app.callback(
