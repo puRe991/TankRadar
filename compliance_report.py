@@ -5,6 +5,8 @@ from datetime import time
 import pandas as pd
 
 FUEL_LABELS = {"e5": "Super E5", "e10": "Super E10", "e5p": "Super Plus", "diesel": "Diesel"}
+GERMAN_TIMEZONE = "Europe/Berlin"
+DEFAULT_MAX_OBSERVATION_GAP_MINUTES = 30
 REPORT_COLUMNS = [
     "event_id", "timestamp", "station_id", "station_name", "brand", "street",
     "house_number", "post_code", "city", "latitude", "longitude", "fuel_type",
@@ -12,23 +14,48 @@ REPORT_COLUMNS = [
 ]
 
 
-def detect_price_change_cases(price_rows, stations, cutoff_hour=12, days=30, now=None):
-    """Return actual price changes after cutoff, enriched with station evidence data."""
+def _as_utc_timestamp(value):
+    """Interpret the application's naive database timestamps as UTC."""
+    timestamp = pd.Timestamp(value)
+    if timestamp.tzinfo is None:
+        return timestamp.tz_localize("UTC")
+    return timestamp.tz_convert("UTC")
+
+
+def detect_price_change_cases(
+    price_rows,
+    stations,
+    cutoff_hour=12,
+    days=30,
+    now=None,
+    max_observation_gap_minutes=DEFAULT_MAX_OBSERVATION_GAP_MINUTES,
+):
+    """Return verified price changes after the German-local cutoff.
+
+    A change is only considered verified when the preceding successful sample is
+    recent enough to bound the change time to the configured observation gap.
+    """
     empty = pd.DataFrame(columns=REPORT_COLUMNS)
     if not price_rows:
         return empty
 
-    now = pd.Timestamp(now or pd.Timestamp.now())
-    start = now - pd.Timedelta(days=days)
+    now_utc = _as_utc_timestamp(now if now is not None else pd.Timestamp.now(tz="UTC"))
+    start_utc = now_utc - pd.Timedelta(days=days)
     prices = pd.DataFrame(price_rows)
-    prices["timestamp"] = pd.to_datetime(prices["timestamp"])
-    prices = prices.sort_values(["station_id", "fuel_type", "timestamp", "id"])
-    prices["previous_price"] = prices.groupby(["station_id", "fuel_type"])["price"].shift(1)
+    prices["timestamp_utc"] = prices["timestamp"].map(_as_utc_timestamp)
+    prices = prices.sort_values(["station_id", "fuel_type", "timestamp_utc", "id"])
+    groups = prices.groupby(["station_id", "fuel_type"])
+    prices["previous_price"] = groups["price"].shift(1)
+    prices["previous_timestamp_utc"] = groups["timestamp_utc"].shift(1)
+    prices["observation_gap"] = prices["timestamp_utc"] - prices["previous_timestamp_utc"]
+    prices["timestamp"] = prices["timestamp_utc"].map(lambda value: value.tz_convert(GERMAN_TIMEZONE))
+    max_observation_gap = pd.Timedelta(minutes=max_observation_gap_minutes)
 
     changed = prices[
         prices["previous_price"].notna()
         & prices["price"].ne(prices["previous_price"])
-        & prices["timestamp"].ge(start)
+        & prices["timestamp_utc"].ge(start_utc)
+        & prices["observation_gap"].le(max_observation_gap)
         & prices["timestamp"].dt.time.gt(time(cutoff_hour, 0))
     ].copy()
     if changed.empty:
