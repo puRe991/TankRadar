@@ -21,6 +21,13 @@ TankRadar is a production-ready Python application that monitors real-time gasol
 
 ## Setup
 
+### Windows (automatisch)
+
+1. `install_tankradar.bat` doppelt anklicken. Das Skript installiert bei Bedarf Python, erstellt eine virtuelle Umgebung und installiert alle benoetigten Python-Pakete.
+2. Anschliessend `start_tankradar.bat` doppelt anklicken.
+
+### Manuell
+
 1. **Install Dependencies**:
    ```bash
    pip install -r requirements.txt
