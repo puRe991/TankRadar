@@ -1,17 +1,27 @@
 @echo off
+setlocal EnableExtensions
 TITLE TankRadar Starter
+cd /d "%~dp0"
 echo Starting TankRadar...
 
+:: Prefer the environment created by install_tankradar.bat
+if exist ".venv\Scripts\python.exe" (
+    set "PYTHON_EXE=.venv\Scripts\python.exe"
+) else (
+    set "PYTHON_EXE=python"
+)
+
 :: Check if Python is installed
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Error: Python is not installed or not in PATH.
+"%PYTHON_EXE%" --version >nul 2>&1
+if errorlevel 1 (
+    echo Error: Python and the TankRadar dependencies are not installed.
+    echo Please run install_tankradar.bat first.
     pause
-    exit /b
+    exit /b 1
 )
 
 :: Run the application
 echo Launching dashboard...
-python main.py
+"%PYTHON_EXE%" main.py
 
 pause
