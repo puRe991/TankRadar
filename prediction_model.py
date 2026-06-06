@@ -30,6 +30,29 @@ class FuelPredictionModel:
             return self._predict_with_prophet(prepared_df)
         return self._predict_with_hourly_baseline(prepared_df)
 
+    def predict_next_24h_with_method(self, df, method):
+        """Predict the next 24 hours with a specific forecasting approach.
+
+        This explicit entry point is used by the evaluation layer so backtests
+        compare the production Prophet forecast, the installed hourly fallback
+        and naive baselines under the same input validation rules.
+        """
+        prepared_df = self._prepare_price_data(df)
+        if prepared_df is None:
+            return None
+
+        if method == "prophet":
+            if not self._prophet_available:
+                return None
+            return self._predict_with_prophet(prepared_df)
+        if method == "hourly_baseline":
+            return self._predict_with_hourly_baseline(prepared_df)
+        if method == "last_price":
+            return self._predict_with_last_price_baseline(prepared_df)
+        if method == "typical_daily_minimum":
+            return self._predict_with_typical_daily_minimum_baseline(prepared_df)
+        raise ValueError(f"Unknown prediction method: {method}")
+
     def _prepare_price_data(self, df):
         required_columns = {"timestamp", "price"}
         if not required_columns.issubset(df.columns):
@@ -72,7 +95,7 @@ class FuelPredictionModel:
         result["yhat_lower"] = result["yhat_lower"].clip(lower=1.0, upper=3.0)
         result["yhat_upper"] = result["yhat_upper"].clip(lower=1.0, upper=3.0)
 
-        return self._format_prediction_result(result)
+        return self._format_prediction_result(result, model_name="Prophet")
 
     def _predict_with_hourly_baseline(self, df):
         """Fallback forecast based on recent hourly averages and the current price level."""
@@ -98,17 +121,77 @@ class FuelPredictionModel:
             )
 
         result = pd.DataFrame(forecast_rows)
-        return self._format_prediction_result(result)
+        return self._format_prediction_result(result, model_name="Stundenmittel-Fallback")
 
-    def _format_prediction_result(self, result):
+    def _predict_with_last_price_baseline(self, df):
+        """Naive forecast that assumes the latest valid price remains stable."""
+        now = df["timestamp"].max()
+        current_price = max(1.0, min(3.0, float(df["price"].iloc[-1])))
+
+        forecast_rows = []
+        for offset in range(1, 25):
+            forecast_rows.append(
+                {
+                    "ds": now + timedelta(hours=offset),
+                    "yhat": current_price,
+                    "yhat_lower": max(1.0, current_price - 0.02),
+                    "yhat_upper": min(3.0, current_price + 0.02),
+                }
+            )
+
+        result = pd.DataFrame(forecast_rows)
+        return self._format_prediction_result(result, model_name="Naive Baseline: letzter Preis")
+
+    def _predict_with_typical_daily_minimum_baseline(self, df):
+        """Naive forecast using the historically cheapest hour as a simple pattern."""
+        now = df["timestamp"].max()
+        current_price = float(df["price"].iloc[-1])
+        global_mean = float(df["price"].mean())
+        hourly_minima = df.assign(hour=df["timestamp"].dt.hour).groupby("hour")["price"].min()
+
+        forecast_rows = []
+        for offset in range(1, 25):
+            forecast_time = now + timedelta(hours=offset)
+            typical_min = float(hourly_minima.get(forecast_time.hour, global_mean))
+            predicted_price = (typical_min * 0.8) + (current_price * 0.2)
+            predicted_price = max(1.0, min(3.0, predicted_price))
+            forecast_rows.append(
+                {
+                    "ds": forecast_time,
+                    "yhat": predicted_price,
+                    "yhat_lower": max(1.0, predicted_price - 0.04),
+                    "yhat_upper": min(3.0, predicted_price + 0.04),
+                }
+            )
+
+        result = pd.DataFrame(forecast_rows)
+        return self._format_prediction_result(result, model_name="Naive Baseline: typisches Tagesminimum")
+
+    def _format_prediction_result(self, result, model_name=None):
         if result.empty or result["yhat"].isna().all():
             return None
 
         min_row = result.loc[result["yhat"].idxmin()]
+        has_interval = {"yhat_lower", "yhat_upper"}.issubset(result.columns)
+        interval_width = (result["yhat_upper"] - result["yhat_lower"]).dropna() if has_interval else pd.Series(dtype=float)
+        uncertainty = round(float(interval_width.mean()), 3) if not interval_width.empty else None
+        best_uncertainty = None
+        best_price_lower = None
+        best_price_upper = None
+        if has_interval:
+            best_price_lower = round(float(min_row["yhat_lower"]), 3)
+            best_price_upper = round(float(min_row["yhat_upper"]), 3)
+            best_uncertainty = round(float(min_row["yhat_upper"] - min_row["yhat_lower"]), 3)
+
         return {
             "forecast": result,
             "best_time": min_row["ds"],
             "best_price": round(float(min_row["yhat"]), 3),
+            "best_price_lower": best_price_lower,
+            "best_price_upper": best_price_upper,
+            "uncertainty": uncertainty,
+            "best_uncertainty": best_uncertainty,
+            "model_name": model_name,
         }
 
     def get_prediction_summary(self, station_name, fuel_type, prediction_data):
@@ -121,5 +204,7 @@ Station: {station_name}
 Fuel: {fuel_type}
 Time: {prediction_data['best_time'].strftime('%H:%M')}
 Price: {prediction_data['best_price']} €/L
+Uncertainty: ±{(prediction_data.get('best_uncertainty') or 0) / 2:.3f} €/L
+Model: {prediction_data.get('model_name') or 'N/A'}
         """
         return summary.strip()

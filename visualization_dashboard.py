@@ -9,6 +9,7 @@ from database import DatabaseManager
 from adac_scraper import ADACScraper
 from analysis_engine import AnalysisEngine
 from prediction_model import FuelPredictionModel
+from model_evaluation import FuelModelEvaluator
 from autostart_manager import AutostartManager
 from compliance_report import FUEL_LABELS, build_complaint_pdf, format_address
 from cloud_sync import parse_cloud_price_csv
@@ -41,6 +42,8 @@ class TankRadarDashboard:
         self.db = DatabaseManager()
         self.analysis = AnalysisEngine()
         self.model = FuelPredictionModel()
+        self.evaluator = FuelModelEvaluator(self.model)
+        self._evaluation_cache = {}
         self.autostart = AutostartManager()
         self._setup_layout()
         self._setup_callbacks()
@@ -700,9 +703,9 @@ class TankRadarDashboard:
                 station = next((s for s in stations if s.id == station_id), None)
                 s_display_name = f"{station.brand or ''} {station.name}" if station else f"Station {station_id}"
 
-                df = self.db.get_historical_data(station_id, days=14) # Get more data for average
+                history_df = self.db.get_historical_data(station_id, days=90)
                 
-                if df.empty or fuel_type not in df['fuel_type'].unique():
+                if history_df.empty or fuel_type not in history_df['fuel_type'].unique():
                     fig = go.Figure()
                     fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                     return fig, [
@@ -711,11 +714,24 @@ class TankRadarDashboard:
                         ])
                     ], s_display_name
 
-                fuel_df = df[df['fuel_type'] == fuel_type].sort_values('timestamp')
-                current_price = fuel_df.iloc[-1]['price']
-                avg_price = round(fuel_df['price'].mean(), 3)
+                fuel_history_df = history_df[history_df['fuel_type'] == fuel_type].sort_values('timestamp')
+                cutoff = pd.Timestamp.now() - pd.Timedelta(days=14)
+                fuel_df = fuel_history_df[pd.to_datetime(fuel_history_df['timestamp']) >= cutoff].copy()
+                if fuel_df.empty:
+                    fuel_df = fuel_history_df.tail(200).copy()
+
+                current_price = fuel_history_df.iloc[-1]['price']
+                avg_price = round(fuel_history_df['price'].mean(), 3)
                 
-                prediction = self.model.predict_next_24h(fuel_df)
+                prediction = self.model.predict_next_24h(fuel_history_df)
+                latest_ts = pd.to_datetime(fuel_history_df['timestamp']).max()
+                evaluation_cache_key = (station_id, fuel_type, len(fuel_history_df), latest_ts)
+                evaluation = self._evaluation_cache.get(evaluation_cache_key)
+                if evaluation is None:
+                    # Prophet backtests train multiple models; cache per latest history snapshot
+                    # so dashboard refreshes do not repeatedly recompute identical results.
+                    evaluation = self.evaluator.evaluate(fuel_history_df, max_cutoffs=6)
+                    self._evaluation_cache = {evaluation_cache_key: evaluation}
                 
                 fig = go.Figure()
                 
@@ -746,7 +762,7 @@ class TankRadarDashboard:
                     ]),
                     html.Div(className='metric-item', children=[
                         html.Div([format_fuel_price(avg_price), html.Small(" €", style={'fontSize': '1rem', 'marginLeft': '4px'})], className='metric-value', style={'opacity': '0.7'}),
-                        html.Div(f"Ø Preis ({len(fuel_df)} Datenp.)", className='metric-label')
+                        html.Div(f"Ø Preis ({len(fuel_history_df)} Datenp.)", className='metric-label')
                     ])
                 ]
                 
@@ -779,16 +795,46 @@ class TankRadarDashboard:
                             hovertemplate="<b>Spar-Tipp:</b> Heute %{x|%H:%M}<br><b>Preis:</b> %{y:.3f} €<extra></extra>"
                         ))
                         
+                        best_lower = prediction.get('best_price_lower')
+                        best_upper = prediction.get('best_price_upper')
+                        price_range = f"{best_lower:.3f}–{best_upper:.3f} €/L" if best_lower is not None and best_upper is not None else "Nicht verfügbar"
+                        uncertainty = prediction.get('best_uncertainty')
+                        uncertainty_label = f"Intervallbreite ±{uncertainty / 2:.3f} €/L" if uncertainty is not None else "Unsicherheit nicht verfügbar"
+
                         metrics.extend([
                             html.Div(className='metric-item', children=[
                                 html.Div([format_fuel_price(prediction['best_price']), html.Small(" €", style={'fontSize': '1rem', 'marginLeft': '4px'})], className='metric-value', style={'color': '#00ffaa'}),
-                                html.Div(f"Tiefstwert (heute {prediction['best_time'].strftime('%H:%M')})", className='metric-label')
+                                html.Div(f"Beste Zeit heute {prediction['best_time'].strftime('%H:%M')}", className='metric-label')
+                            ]),
+                            html.Div(className='metric-item', children=[
+                                html.Div(price_range, className='metric-value', style={'color': '#9be7ff', 'fontSize': '1.4rem'}),
+                                html.Div(uncertainty_label, className='metric-label')
                             ]),
                             html.Div(className='metric-item', children=[
                                 html.Div(f"{max(0.0, current_price - prediction['best_price']):.3f} €", className='metric-value', style={'color': '#ffd700'}),
                                 html.Div("Mögliche Ersparnis", className='metric-label')
                             ])
                         ])
+
+                if evaluation.get('best_model'):
+                    best_model = evaluation['best_model']
+                    hit_rate = best_model.get('cheapest_window_accuracy')
+                    hit_label = f"{hit_rate * 100:.0f}% Trefferquote" if hit_rate is not None else "Trefferquote N/A"
+                    metrics.extend([
+                        html.Div(className='metric-item', children=[
+                            html.Div(f"MAE {best_model['mae']:.3f} / RMSE {best_model['rmse']:.3f}", className='metric-value', style={'color': '#c8ff00', 'fontSize': '1.35rem'}),
+                            html.Div(f"Modellqualität: {best_model['label']} ({evaluation['cutoff_count']} Backtests)", className='metric-label')
+                        ]),
+                        html.Div(className='metric-item', children=[
+                            html.Div(hit_label, className='metric-value', style={'color': '#c8ff00', 'fontSize': '1.35rem'}),
+                            html.Div("Günstigster Zeitraum korrekt erkannt", className='metric-label')
+                        ])
+                    ])
+                elif evaluation.get('message'):
+                    metrics.append(html.Div(className='metric-item', children=[
+                        html.Div("N/A", className='metric-value', style={'opacity': '0.7'}),
+                        html.Div(f"Modellqualität: {evaluation['message']}", className='metric-label')
+                    ]))
 
                 # Calculate dynamic Y-axis range based on both history and prediction
                 all_prices = fuel_df['price'].tolist()
