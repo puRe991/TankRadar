@@ -1,6 +1,6 @@
 import logging
 import os
-from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, Index
+from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, Index, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -154,11 +154,14 @@ class DatabaseManager:
         finally:
             session.close()
 
-    def add_price(self, station_id: str, fuel_type: str, price: float):
+    def add_price(self, station_id: str, fuel_type: str, price: float, timestamp=None):
         from schemas import FuelPriceSchema
         try:
-            # Validate with Pydantic
-            data = FuelPriceSchema(station_id=station_id, fuel_type=fuel_type, price=price)
+            # Validate with Pydantic. Cloud sync may pass the original scrape timestamp.
+            payload = {"station_id": station_id, "fuel_type": fuel_type, "price": price}
+            if timestamp is not None:
+                payload["timestamp"] = timestamp
+            data = FuelPriceSchema(**payload)
             session = self.Session()
             try:
                 logger.info(f"Adding price: {data.price}€ for {data.fuel_type} at {data.station_id}")
@@ -171,13 +174,91 @@ class DatabaseManager:
                 session.add(new_price)
                 session.commit()
                 logger.info(f"Successfully saved price for {data.station_id}")
+                return True
             except Exception as e:
                 session.rollback()
                 logger.error(f"Error adding price for {data.station_id}: {e}")
+                return False
             finally:
                 session.close()
         except Exception as e:
             logger.error(f"Validation failed for price: {e}")
+            return False
+
+    def bulk_import_cloud_prices(self, rows):
+        """Import normalized cloud rows and create missing station records.
+
+        Rows older than the newest local cloud timestamp are skipped. This keeps
+        repeated Cloud Sync clicks idempotent without adding a heavy unique index
+        migration to existing user databases.
+        """
+        session = self.Session()
+        stats = {"inserted": 0, "stations_upserted": 0, "skipped_old": 0, "skipped_invalid": 0}
+        try:
+            newest_local_ts = session.query(func.max(FuelPrice.timestamp)).scalar()
+            station_cache = {}
+
+            for row in sorted(rows, key=lambda item: item.timestamp):
+                if not row.station_id or row.fuel_type not in {"e5", "e10", "e5p", "diesel"} or row.price <= 0:
+                    stats["skipped_invalid"] += 1
+                    continue
+
+                # Always repair/create station metadata, even when the price row
+                # itself is older than the local DB. This fixes installations
+                # that already have prices but no station rows to render cards.
+                if row.station_id not in station_cache:
+                    station_cache[row.station_id] = session.get(Station, row.station_id)
+
+                station = station_cache[row.station_id]
+                if station is None:
+                    station = Station(
+                        id=row.station_id,
+                        name=row.station_name or f"Station {row.station_id}",
+                        brand=row.brand,
+                        city=row.city,
+                    )
+                    session.add(station)
+                    station_cache[row.station_id] = station
+                    stats["stations_upserted"] += 1
+                else:
+                    changed = False
+                    if row.station_name and (not station.name or station.name.startswith("Station ")):
+                        station.name = row.station_name
+                        changed = True
+                    if row.brand and not station.brand:
+                        station.brand = row.brand
+                        changed = True
+                    if row.city and not station.city:
+                        station.city = row.city
+                        changed = True
+                    if changed:
+                        stats["stations_upserted"] += 1
+
+                if newest_local_ts is not None and row.timestamp <= newest_local_ts:
+                    stats["skipped_old"] += 1
+                    continue
+
+                session.add(FuelPrice(
+                    station_id=row.station_id,
+                    fuel_type=row.fuel_type,
+                    price=row.price,
+                    timestamp=row.timestamp,
+                ))
+                stats["inserted"] += 1
+
+            session.commit()
+            logger.info(
+                "Cloud import completed: %(inserted)s prices, %(stations_upserted)s stations, "
+                "%(skipped_old)s old rows skipped, %(skipped_invalid)s invalid rows skipped",
+                stats,
+            )
+            return stats
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error importing cloud prices: {e}")
+            raise
+        finally:
+            session.close()
 
     def get_historical_data(self, station_id, days=365):
         import pandas as pd
