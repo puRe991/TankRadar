@@ -36,3 +36,14 @@ def test_prediction_rejects_invalid_input_data():
     prediction = model.predict_next_24h(pd.DataFrame({"timestamp": ["ungueltig"], "price": ["n/a"]}))
 
     assert prediction is None
+
+
+def test_explicit_baseline_prediction_contains_uncertainty_metadata():
+    model = FuelPredictionModel()
+
+    prediction = model.predict_next_24h_with_method(_price_history(), "last_price")
+
+    assert prediction is not None
+    assert prediction["model_name"] == "Naive Baseline: letzter Preis"
+    assert prediction["best_price_lower"] <= prediction["best_price"] <= prediction["best_price_upper"]
+    assert prediction["best_uncertainty"] is not None
