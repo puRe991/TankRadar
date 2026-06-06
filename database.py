@@ -1,6 +1,6 @@
 import logging
 import os
-from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, Index, func
+from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -188,15 +188,23 @@ class DatabaseManager:
     def bulk_import_cloud_prices(self, rows):
         """Import normalized cloud rows and create missing station records.
 
-        Rows older than the newest local cloud timestamp are skipped. This keeps
-        repeated Cloud Sync clicks idempotent without adding a heavy unique index
-        migration to existing user databases.
+        Cloud rows are de-duplicated by station, fuel type and scrape timestamp.
+        Do not skip rows only because the local database already contains newer
+        prices: a local/manual scrape can be newer than the cloud CSV while the
+        cloud CSV still contains missing historical station/fuel combinations.
         """
         session = self.Session()
-        stats = {"inserted": 0, "stations_upserted": 0, "skipped_old": 0, "skipped_invalid": 0}
+        stats = {
+            "inserted": 0,
+            "stations_upserted": 0,
+            "skipped_duplicate": 0,
+            "skipped_invalid": 0,
+            # Kept for older dashboard/log code that may still read this key.
+            "skipped_old": 0,
+        }
         try:
-            newest_local_ts = session.query(func.max(FuelPrice.timestamp)).scalar()
             station_cache = {}
+            price_cache = set()
 
             for row in sorted(rows, key=lambda item: item.timestamp):
                 if not row.station_id or row.fuel_type not in {"e5", "e10", "e5p", "diesel"} or row.price <= 0:
@@ -204,8 +212,8 @@ class DatabaseManager:
                     continue
 
                 # Always repair/create station metadata, even when the price row
-                # itself is older than the local DB. This fixes installations
-                # that already have prices but no station rows to render cards.
+                # itself is already present. This fixes installations that have
+                # prices but no station rows to render cards.
                 if row.station_id not in station_cache:
                     station_cache[row.station_id] = session.get(Station, row.station_id)
 
@@ -234,8 +242,18 @@ class DatabaseManager:
                     if changed:
                         stats["stations_upserted"] += 1
 
-                if newest_local_ts is not None and row.timestamp <= newest_local_ts:
-                    stats["skipped_old"] += 1
+                price_key = (row.station_id, row.fuel_type, row.timestamp)
+                if price_key not in price_cache:
+                    price_exists = session.query(FuelPrice.id).filter(
+                        FuelPrice.station_id == row.station_id,
+                        FuelPrice.fuel_type == row.fuel_type,
+                        FuelPrice.timestamp == row.timestamp,
+                    ).first()
+                    if price_exists is not None:
+                        price_cache.add(price_key)
+
+                if price_key in price_cache:
+                    stats["skipped_duplicate"] += 1
                     continue
 
                 session.add(FuelPrice(
@@ -244,12 +262,13 @@ class DatabaseManager:
                     price=row.price,
                     timestamp=row.timestamp,
                 ))
+                price_cache.add(price_key)
                 stats["inserted"] += 1
 
             session.commit()
             logger.info(
                 "Cloud import completed: %(inserted)s prices, %(stations_upserted)s stations, "
-                "%(skipped_old)s old rows skipped, %(skipped_invalid)s invalid rows skipped",
+                "%(skipped_duplicate)s duplicate rows skipped, %(skipped_invalid)s invalid rows skipped",
                 stats,
             )
             return stats
