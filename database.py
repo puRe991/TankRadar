@@ -1,8 +1,9 @@
 import logging
 import os
+import time
 from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, Index
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
 import config
 
@@ -17,6 +18,9 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("TankRadar.Database")
+
+SQLITE_LOCK_RETRY_ATTEMPTS = 3
+SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.5
 
 Base = declarative_base()
 
@@ -80,6 +84,7 @@ class DatabaseManager:
                 cursor = dbapi_connection.cursor()
                 cursor.execute("PRAGMA journal_mode=WAL")
                 cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA busy_timeout=30000")
                 cursor.close()
 
             Base.metadata.create_all(self.engine, checkfirst=True)
@@ -185,6 +190,13 @@ class DatabaseManager:
             logger.error(f"Validation failed for price: {e}")
             return False
 
+    @staticmethod
+    def _is_sqlite_locked_error(error):
+        """Return True for SQLite lock errors raised through SQLAlchemy."""
+        if not isinstance(error, OperationalError):
+            return False
+        return "database is locked" in str(error).lower()
+
     def bulk_import_cloud_prices(self, rows):
         """Import normalized cloud rows and create missing station records.
 
@@ -192,92 +204,115 @@ class DatabaseManager:
         Do not skip rows only because the local database already contains newer
         prices: a local/manual scrape can be newer than the cloud CSV while the
         cloud CSV still contains missing historical station/fuel combinations.
+
+        The import performs duplicate checks while new rows are pending in the
+        SQLAlchemy session. Those reads must not trigger an autoflush, because
+        SQLite allows only one writer at a time and a premature flush can fail
+        with ``database is locked`` while the dashboard or scraper is writing.
         """
-        session = self.Session()
-        stats = {
-            "inserted": 0,
-            "stations_upserted": 0,
-            "skipped_duplicate": 0,
-            "skipped_invalid": 0,
-            # Kept for older dashboard/log code that may still read this key.
-            "skipped_old": 0,
-        }
-        try:
-            station_cache = {}
-            price_cache = set()
+        rows = tuple(rows)
+        last_error = None
+        for attempt in range(1, SQLITE_LOCK_RETRY_ATTEMPTS + 1):
+            session = self.Session()
+            stats = {
+                "inserted": 0,
+                "stations_upserted": 0,
+                "skipped_duplicate": 0,
+                "skipped_invalid": 0,
+                # Kept for older dashboard/log code that may still read this key.
+                "skipped_old": 0,
+            }
+            try:
+                station_cache = {}
+                price_cache = set()
 
-            for row in sorted(rows, key=lambda item: item.timestamp):
-                if not row.station_id or row.fuel_type not in {"e5", "e10", "e5p", "diesel"} or row.price <= 0:
-                    stats["skipped_invalid"] += 1
-                    continue
+                with session.no_autoflush:
+                    for row in sorted(rows, key=lambda item: item.timestamp):
+                        if not row.station_id or row.fuel_type not in {"e5", "e10", "e5p", "diesel"} or row.price <= 0:
+                            stats["skipped_invalid"] += 1
+                            continue
 
-                # Always repair/create station metadata, even when the price row
-                # itself is already present. This fixes installations that have
-                # prices but no station rows to render cards.
-                if row.station_id not in station_cache:
-                    station_cache[row.station_id] = session.get(Station, row.station_id)
+                        # Always repair/create station metadata, even when the price row
+                        # itself is already present. This fixes installations that have
+                        # prices but no station rows to render cards.
+                        if row.station_id not in station_cache:
+                            station_cache[row.station_id] = session.get(Station, row.station_id)
 
-                station = station_cache[row.station_id]
-                if station is None:
-                    station = Station(
-                        id=row.station_id,
-                        name=row.station_name or f"Station {row.station_id}",
-                        brand=row.brand,
-                        city=row.city,
-                    )
-                    session.add(station)
-                    station_cache[row.station_id] = station
-                    stats["stations_upserted"] += 1
-                else:
-                    changed = False
-                    if row.station_name and (not station.name or station.name.startswith("Station ")):
-                        station.name = row.station_name
-                        changed = True
-                    if row.brand and not station.brand:
-                        station.brand = row.brand
-                        changed = True
-                    if row.city and not station.city:
-                        station.city = row.city
-                        changed = True
-                    if changed:
-                        stats["stations_upserted"] += 1
+                        station = station_cache[row.station_id]
+                        if station is None:
+                            station = Station(
+                                id=row.station_id,
+                                name=row.station_name or f"Station {row.station_id}",
+                                brand=row.brand,
+                                city=row.city,
+                            )
+                            session.add(station)
+                            station_cache[row.station_id] = station
+                            stats["stations_upserted"] += 1
+                        else:
+                            changed = False
+                            if row.station_name and (not station.name or station.name.startswith("Station ")):
+                                station.name = row.station_name
+                                changed = True
+                            if row.brand and not station.brand:
+                                station.brand = row.brand
+                                changed = True
+                            if row.city and not station.city:
+                                station.city = row.city
+                                changed = True
+                            if changed:
+                                stats["stations_upserted"] += 1
 
-                price_key = (row.station_id, row.fuel_type, row.timestamp)
-                if price_key not in price_cache:
-                    price_exists = session.query(FuelPrice.id).filter(
-                        FuelPrice.station_id == row.station_id,
-                        FuelPrice.fuel_type == row.fuel_type,
-                        FuelPrice.timestamp == row.timestamp,
-                    ).first()
-                    if price_exists is not None:
+                        price_key = (row.station_id, row.fuel_type, row.timestamp)
+                        if price_key not in price_cache:
+                            price_exists = session.query(FuelPrice.id).filter(
+                                FuelPrice.station_id == row.station_id,
+                                FuelPrice.fuel_type == row.fuel_type,
+                                FuelPrice.timestamp == row.timestamp,
+                            ).first()
+                            if price_exists is not None:
+                                price_cache.add(price_key)
+
+                        if price_key in price_cache:
+                            stats["skipped_duplicate"] += 1
+                            continue
+
+                        session.add(FuelPrice(
+                            station_id=row.station_id,
+                            fuel_type=row.fuel_type,
+                            price=row.price,
+                            timestamp=row.timestamp,
+                        ))
                         price_cache.add(price_key)
+                        stats["inserted"] += 1
 
-                if price_key in price_cache:
-                    stats["skipped_duplicate"] += 1
+                session.commit()
+                logger.info(
+                    "Cloud import completed: %(inserted)s prices, %(stations_upserted)s stations, "
+                    "%(skipped_duplicate)s duplicate rows skipped, %(skipped_invalid)s invalid rows skipped",
+                    stats,
+                )
+                return stats
+            except Exception as e:
+                session.rollback()
+                if self._is_sqlite_locked_error(e) and attempt < SQLITE_LOCK_RETRY_ATTEMPTS:
+                    last_error = e
+                    logger.warning(
+                        "Cloud import hit a locked SQLite database; retrying attempt %s/%s",
+                        attempt + 1,
+                        SQLITE_LOCK_RETRY_ATTEMPTS,
+                    )
+                    time.sleep(SQLITE_LOCK_RETRY_DELAY_SECONDS * attempt)
                     continue
+                logger.error(f"Error importing cloud prices: {e}")
+                raise
+            finally:
+                session.close()
 
-                session.add(FuelPrice(
-                    station_id=row.station_id,
-                    fuel_type=row.fuel_type,
-                    price=row.price,
-                    timestamp=row.timestamp,
-                ))
-                price_cache.add(price_key)
-                stats["inserted"] += 1
-
-            session.commit()
-            logger.info(
-                "Cloud import completed: %(inserted)s prices, %(stations_upserted)s stations, "
-                "%(skipped_duplicate)s duplicate rows skipped, %(skipped_invalid)s invalid rows skipped",
-                stats,
-            )
-            return stats
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Error importing cloud prices: {e}")
-            raise
-        finally:
-            session.close()
+        # Defensive fallback; the loop either returns or raises.
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Cloud import failed without an explicit database error")
 
     def get_historical_data(self, station_id, days=365):
         import pandas as pd
