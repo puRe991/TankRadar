@@ -130,3 +130,49 @@ def test_bulk_import_cloud_prices_skips_duplicates_but_keeps_station_repair(tmp_
         assert station.city == "Real City"
     finally:
         session.close()
+
+
+def test_bulk_import_cloud_prices_defers_flush_until_commit(tmp_path, monkeypatch):
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session as SqlAlchemySession
+
+    db_path = tmp_path / "tankradar.db"
+    monkeypatch.setattr(config, "DATABASE_URL", f"sqlite:///{db_path}")
+    db = DatabaseManager()
+
+    flush_count = 0
+
+    def count_flush(session, flush_context, instances):
+        nonlocal flush_count
+        flush_count += 1
+
+    event.listen(SqlAlchemySession, "before_flush", count_flush)
+    try:
+        rows = [
+            CloudPriceRow(
+                timestamp=datetime(2026, 6, 6, 10, 0),
+                station_id="station-1",
+                station_name="Station One",
+                brand="Brand A",
+                city="City A",
+                fuel_type="e10",
+                price=1.75,
+            ),
+            CloudPriceRow(
+                timestamp=datetime(2026, 6, 6, 10, 5),
+                station_id="station-2",
+                station_name="Station Two",
+                brand="Brand B",
+                city="City B",
+                fuel_type="diesel",
+                price=1.65,
+            ),
+        ]
+
+        stats = db.bulk_import_cloud_prices(rows)
+    finally:
+        event.remove(SqlAlchemySession, "before_flush", count_flush)
+
+    assert stats["inserted"] == 2
+    assert stats["stations_upserted"] == 2
+    assert flush_count == 1
