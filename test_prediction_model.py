@@ -1,0 +1,38 @@
+from datetime import datetime, timedelta
+
+import pandas as pd
+
+import config
+from prediction_model import FuelPredictionModel
+
+
+def _price_history(rows=None):
+    row_count = rows or max(config.MIN_DATA_POINTS_FOR_ML, 24)
+    start = datetime(2026, 6, 1, 8)
+    return pd.DataFrame(
+        [
+            {"timestamp": start + timedelta(hours=index), "price": 1.70 + (index % 5) * 0.01}
+            for index in range(row_count)
+        ]
+    )
+
+
+def test_hourly_baseline_prediction_without_prophet():
+    model = FuelPredictionModel()
+    model._prophet_available = False
+
+    prediction = model.predict_next_24h(_price_history())
+
+    assert prediction is not None
+    assert len(prediction["forecast"]) == 24
+    assert 1.0 <= prediction["best_price"] <= 3.0
+    assert {"ds", "yhat", "yhat_lower", "yhat_upper"}.issubset(prediction["forecast"].columns)
+
+
+def test_prediction_rejects_invalid_input_data():
+    model = FuelPredictionModel()
+    model._prophet_available = False
+
+    prediction = model.predict_next_24h(pd.DataFrame({"timestamp": ["ungueltig"], "price": ["n/a"]}))
+
+    assert prediction is None
