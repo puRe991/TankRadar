@@ -11,6 +11,7 @@ from analysis_engine import AnalysisEngine
 from prediction_model import FuelPredictionModel
 from autostart_manager import AutostartManager
 from compliance_report import FUEL_LABELS, build_complaint_pdf, format_address
+from cloud_sync import parse_cloud_price_csv
 import config
 from datetime import datetime
 import time
@@ -1431,31 +1432,23 @@ class TankRadarDashboard:
             
             try:
                 import requests
-                import io
-                import csv
                 
-                response = requests.get(url, timeout=15)
+                response = requests.get(url, timeout=30)
                 response.raise_for_status()
                 
-                csv_data = io.StringIO(response.text)
-                reader = csv.DictReader(csv_data)
-                
-                count = 0
-                for row in reader:
-                    # Sync price to DB
-                    s_id = row['station_id']
-                    f_type = row['fuel_type']
-                    p_val = float(row['price'])
-                    ts = row['timestamp']
-                    
-                    # We need to make sure the station exists
-                    # If not, the sync will just skip or we could try to create it
-                    # For now, we assume user shares the same stations
-                    if self.db.add_price(s_id, f_type, p_val, timestamp=ts):
-                        count += 1
-                
+                rows, malformed = parse_cloud_price_csv(response.text)
+                if not rows:
+                    return self._create_notification("Cloud Sync: keine verwertbaren Preisdaten in der CSV gefunden.", 'warning'), dash.no_update
+
+                stats = self.db.bulk_import_cloud_prices(rows)
                 grid = self._get_station_grid_content(fuel_type, selected_id)
-                return self._create_notification(f"Cloud Sync erfolgreich! {count} Einträge importiert.", 'success'), grid
+                details = (
+                    f"{stats['inserted']} Preise importiert, "
+                    f"{stats['stations_upserted']} Tankstellen aktualisiert"
+                )
+                if malformed:
+                    details += f", {malformed} fehlerhafte CSV-Zeilen übersprungen"
+                return self._create_notification(f"Cloud Sync erfolgreich: {details}.", 'success'), grid
             except Exception as e:
                 return self._create_notification(f"Sync fehlgeschlagen: {str(e)}", 'error'), dash.no_update
 

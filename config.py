@@ -22,5 +22,6 @@ DEFAULT_SCRAPE_LOCATION = "35444"  # Biebertal as default
 SCRAPE_INTERVAL_MINUTES = 15      # Auto-scrape every N minutes
 
 # Cloud Sync Settings (GitHub)
-# Replace with your own raw URL once repo is set up
-GITHUB_CSV_URL = os.getenv("GITHUB_CSV_URL", "")
+# Raw CSV written by .github/workflows/scraper.yml. Override via GITHUB_CSV_URL for forks.
+DEFAULT_GITHUB_CSV_URL = "https://raw.githubusercontent.com/puRe991/TankRadar/main/prices_history.csv"
+GITHUB_CSV_URL = os.getenv("GITHUB_CSV_URL", DEFAULT_GITHUB_CSV_URL)
