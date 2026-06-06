@@ -1,5 +1,5 @@
-# Version ranges intentionally prefer pre-built wheels for Python 3.10-3.12 64-bit.
-# This avoids local C/C++ compilation during the Windows one-click installation.
+# Version ranges intentionally prefer pre-built wheels for Python 3.10-3.12 on 64-bit Windows.
+# This avoids local C/C++ compilation during the 64-bit Windows one-click installation.
 pandas>=2.2,<3.0
 numpy>=1.26,<3.0
 scikit-learn>=1.4,<2.0

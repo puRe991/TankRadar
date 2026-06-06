@@ -1,0 +1,13 @@
+# 32-bit Windows profile for Python 3.10-3.11: keep dependencies on versions with practical x86 wheels.
+# Prophet/scikit-learn are intentionally omitted; TankRadar falls back to a lightweight predictor.
+pandas>=1.5.3,<2.1
+numpy>=1.23.5,<1.27
+dash>=2.16,<4.0
+plotly>=5.20,<7.0
+requests>=2.31,<3.0
+SQLAlchemy>=2.0,<3.0
+psycopg2-binary>=2.9,<3.0
+python-dotenv>=1.0,<2.0
+APScheduler>=3.10,<4.0
+beautifulsoup4>=4.12,<5.0
+pydantic>=1.10,<2.0
