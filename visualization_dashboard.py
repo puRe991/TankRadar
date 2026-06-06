@@ -115,9 +115,21 @@ class TankRadarDashboard:
 
                     # Graph Card
                     html.Div(className='glass-card', children=[
-                        html.Div(style={'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'center', 'marginBottom': '10px'}, children=[
-                            html.H2("Preisentwicklung", style={'margin': '0', 'fontSize': '1.8rem', 'fontWeight': '700'}),
-                            html.Span(id='selected-station-name', style={'color': 'var(--text-dim)', 'fontWeight': '500'})
+                        html.Div(className='graph-header', children=[
+                            html.Div(children=[
+                                html.H2("Preisentwicklung", style={'margin': '0', 'fontSize': '1.8rem', 'fontWeight': '700'}),
+                                html.Span(id='selected-station-name', style={'color': 'var(--text-dim)', 'fontWeight': '500'})
+                            ]),
+                            html.Div(className='station-selector-panel', children=[
+                                html.Label("Tankstelle auswählen", className='input-label', style={'marginBottom': '6px', 'display': 'block'}),
+                                dcc.Dropdown(
+                                    id='dashboard-station-selector',
+                                    options=self._get_station_options(),
+                                    value=self._get_default_station_id(),
+                                    clearable=False,
+                                    placeholder='Keine Tankstellen vorhanden'
+                                )
+                            ])
                         ]),
                         # Next-scrape countdown bar
                         html.Div(id='scrape-countdown-bar', style={
@@ -130,7 +142,7 @@ class TankRadarDashboard:
                         }, children=[
                             html.Span("⏱️", style={'fontSize': '1rem'}),
                             html.Span("Nächster Scan in "),
-                            html.Span(id='scrape-countdown-value', children='--:--', style={'fontWeight': '700', 'color': 'var(--primary)', 'fontVariantNumeric': 'tabular-nums'}),
+                            html.Span(id='scrape-countdown-value', children='--:--', style={'fontWeight': '700', 'color': 'var(--accent)', 'fontVariantNumeric': 'tabular-nums'}),
                             html.Span("|", style={'opacity': '0.3'}),
                             html.Span(id='scrape-last-time', children='Noch kein Scan', style={'opacity': '0.7'}),
                         ]),
@@ -400,13 +412,36 @@ class TankRadarDashboard:
             ])
         ])
 
-    def _get_station_options(self):
+    def _get_station_options(self, fuel_type=None):
         stations = self.db.get_all_stations()
         if not stations:
             # Fallback to config IDs if DB is empty
             station_ids = getattr(config, 'STATION_IDS', [])
             return [{'label': f"Station {s_id[:8]}...", 'value': s_id} for s_id in station_ids]
-        return [{'label': f"{s.brand if s.brand else ''} {s.name} ({s.city})", 'value': s.id} for s in stations]
+
+        latest_prices = {}
+        if fuel_type:
+            try:
+                latest_df = self.db.get_latest_prices()
+                if not latest_df.empty:
+                    fuel_latest = latest_df[latest_df['fuel_type'] == fuel_type]
+                    latest_prices = {
+                        str(row['station_id']): f"{float(row['price']):.3f} €/L"
+                        for _, row in fuel_latest.iterrows()
+                    }
+            except Exception:
+                latest_prices = {}
+
+        options = []
+        for station in stations:
+            brand = station.brand or "Freie Tankstelle"
+            city = station.city or "Ort unbekannt"
+            label = f"{brand} {station.name} ({city})"
+            price = latest_prices.get(str(station.id))
+            if price:
+                label = f"{label} · {price}"
+            options.append({'label': label, 'value': station.id})
+        return options
 
     def _get_default_station_id(self):
         stations = self.db.get_all_stations()
@@ -456,7 +491,7 @@ class TankRadarDashboard:
             card_content = [
                 html.Div(style={'position': 'absolute', 'top': '15px', 'right': '15px', 'display': 'flex', 'gap': '10px', 'zIndex': '10'}, children=[
                     html.Span("⭐" if is_favorite else "☆", id={'type': 'toggle-favorite', 'index': s.id}, n_clicks=0, 
-                              style={'cursor': 'pointer', 'fontSize': '1.2rem', 'color': 'var(--primary)' if is_favorite else 'white', 'opacity': '0.9'}),
+                              style={'cursor': 'pointer', 'fontSize': '1.2rem', 'color': 'var(--accent)' if is_favorite else 'white', 'opacity': '0.9'}),
                     html.Span("✏️", id={'type': 'edit-station', 'index': s.id}, n_clicks=0, style={'cursor': 'pointer', 'fontSize': '1.2rem', 'opacity': '0.6', 'transition': 'opacity 0.2s'}),
                     html.Span("🗑️", id={'type': 'delete-station', 'index': s.id}, n_clicks=0, style={'cursor': 'pointer', 'fontSize': '1.2rem', 'opacity': '0.6', 'transition': 'opacity 0.2s', 'color': 'var(--secondary)'})
                 ]),
@@ -531,6 +566,36 @@ class TankRadarDashboard:
         def render_station_grid(_, selected_id, fuel_type):
             return self._get_station_grid_content(fuel_type, selected_id)
 
+        # Keep the always-visible station selector in sync with imports, edits and card clicks.
+        @self.app.callback(
+            [Output('dashboard-station-selector', 'options'),
+             Output('dashboard-station-selector', 'value')],
+            [Input('interval-component', 'n_intervals'),
+             Input('station-selection-store', 'data'),
+             Input('fuel-type-selector', 'value'),
+             Input('save-station', 'n_clicks'),
+             Input('trigger-cloud-sync', 'n_clicks'),
+             Input('last-scrape-ts', 'data')]
+        )
+        def sync_station_selector(_interval, selected_id, fuel_type, _save, _sync, _scrape_ts):
+            options = self._get_station_options(fuel_type)
+            option_values = [option['value'] for option in options]
+            if selected_id in option_values:
+                return options, selected_id
+            fallback = option_values[0] if option_values else None
+            return options, fallback
+
+        # Callback to handle station selection from the top dropdown.
+        @self.app.callback(
+            Output('station-selection-store', 'data', allow_duplicate=True),
+            Input('dashboard-station-selector', 'value'),
+            prevent_initial_call=True
+        )
+        def select_station_from_dropdown(station_id):
+            if not station_id:
+                return dash.no_update
+            return station_id
+
         # Callback to handle station selection from cards
         @self.app.callback(
             Output('station-selection-store', 'data'),
@@ -558,11 +623,12 @@ class TankRadarDashboard:
              Output('new-station-brand', 'value', allow_duplicate=True),
              Output('new-station-city', 'value', allow_duplicate=True)],
             [Input({'type': 'delete-station', 'index': ALL}, 'n_clicks'),
-             Input({'type': 'edit-station', 'index': ALL}, 'n_clicks')],
+             Input({'type': 'edit-station', 'index': ALL}, 'n_clicks'),
+             Input({'type': 'toggle-favorite', 'index': ALL}, 'n_clicks')],
             [State('fuel-type-selector', 'value')],
             prevent_initial_call=True
         )
-        def handle_management(n_delete, n_edit, fuel_type):
+        def handle_management(n_delete, n_edit, n_favorite, fuel_type):
             ctx = callback_context
             if not ctx.triggered:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
@@ -731,8 +797,18 @@ class TankRadarDashboard:
                     pred_prices = [p for p in prediction['forecast']['yhat'].tolist() if 0.5 < p < 3.0]
                     all_prices.extend(pred_prices)
                 
-                y_min = 0.0
-                y_max = max(all_prices) * 1.05 if all_prices else 2.5
+                valid_prices = [float(price) for price in all_prices if pd.notna(price) and 0.5 < float(price) < 3.0]
+                if valid_prices:
+                    min_price = min(valid_prices)
+                    max_price = max(valid_prices)
+                    padding = max(0.03, (max_price - min_price) * 0.15)
+                    y_min = max(0.0, min_price - padding)
+                    y_max = max_price + padding
+                    if y_max <= y_min:
+                        y_max = y_min + 0.06
+                else:
+                    y_min = 1.0
+                    y_max = 2.5
 
                 # DEBUG: Print prediction presence to terminal
                 print(f"DEBUG: Station {station_id} | Fuel {fuel_type} | Prediction Found: {prediction is not None}")
@@ -1351,14 +1427,17 @@ class TankRadarDashboard:
         @self.app.callback(
             [Output('scraper-status', 'children'),
              Output('scraper-dummy-output', 'children'),
-             Output('last-scrape-ts', 'data')],
+             Output('last-scrape-ts', 'data'),
+             Output('station-grid', 'children', allow_duplicate=True)],
             Input('trigger-adac-scrape', 'n_clicks'),
-            State('scraper-plz-input', 'value'),
+            [State('scraper-plz-input', 'value'),
+             State('fuel-type-selector', 'value'),
+             State('station-selection-store', 'data')],
             prevent_initial_call=True
         )
-        def run_adac_scrape(n_clicks, plz):
+        def run_adac_scrape(n_clicks, plz, fuel_type, selected_id):
             if not n_clicks or not plz:
-                return "", "", dash.no_update
+                return "", "", dash.no_update, dash.no_update
             
             try:
                 scraper = ADACScraper(self.db)
@@ -1369,9 +1448,10 @@ class TankRadarDashboard:
                 detail = ", ".join(parts) if parts else "keine Treffer"
                 
                 msg = f"✅ {total} Stationen importiert ({detail})"
-                return msg, "", time.time()
+                grid = self._get_station_grid_content(fuel_type, selected_id)
+                return msg, "", time.time(), grid
             except Exception as e:
-                return f"❌ Fehler: {e}", "", dash.no_update
+                return f"❌ Fehler: {e}", "", dash.no_update, dash.no_update
 
         # Countdown timer callback
         @self.app.callback(
@@ -1456,10 +1536,10 @@ class TankRadarDashboard:
         colors = {
             'success': 'var(--success)',
             'error': 'var(--secondary)',
-            'info': 'var(--primary)',
+            'info': 'var(--accent)',
             'warning': '#ffd700'
         }
-        color = colors.get(n_type, 'var(--primary)')
+        color = colors.get(n_type, 'var(--accent)')
         
         return html.Div(message, style={
             'padding': '15px 25px', 
