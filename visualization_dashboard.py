@@ -1446,9 +1446,14 @@ class TankRadarDashboard:
                     f"{stats['inserted']} Preise importiert, "
                     f"{stats['stations_upserted']} Tankstellen aktualisiert"
                 )
+                if stats.get('skipped_duplicate'):
+                    details += f", {stats['skipped_duplicate']} bereits vorhandene Preise übersprungen"
                 if malformed:
                     details += f", {malformed} fehlerhafte CSV-Zeilen übersprungen"
-                return self._create_notification(f"Cloud Sync erfolgreich: {details}.", 'success'), grid
+
+                notification_type = 'success' if stats['inserted'] or stats['stations_upserted'] else 'info'
+                prefix = "Cloud Sync erfolgreich" if notification_type == 'success' else "Cloud Sync abgeschlossen"
+                return self._create_notification(f"{prefix}: {details}.", notification_type), grid
             except Exception as e:
                 return self._create_notification(f"Sync fehlgeschlagen: {str(e)}", 'error'), dash.no_update
 

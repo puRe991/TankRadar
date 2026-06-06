@@ -47,7 +47,7 @@ def _normalize_row(raw: list[str]) -> Optional[CloudPriceRow]:
     if not raw or all(not cell.strip() for cell in raw):
         return None
 
-    first = raw[0].strip().lower()
+    first = raw[0].lstrip("﻿").strip().lower()
     if first in {"id", "timestamp"}:
         return None
 
