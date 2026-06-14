@@ -38,7 +38,13 @@ def format_fuel_price(price_val):
 class TankRadarDashboard:
     def __init__(self):
         self._app_start_ts = time.time()
-        self.app = Dash(__name__, assets_folder='assets', suppress_callback_exceptions=True)
+        self.app = Dash(
+            __name__,
+            assets_folder='assets',
+            suppress_callback_exceptions=True,
+            serve_locally=True,
+            eager_loading=True,
+        )
         self.db = DatabaseManager()
         self.analysis = AnalysisEngine()
         self.model = FuelPredictionModel()
