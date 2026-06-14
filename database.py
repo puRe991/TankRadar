@@ -1,7 +1,8 @@
 import logging
 import os
 import time
-from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, Index
+from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, Index, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
@@ -69,23 +70,20 @@ class RefuelLog(Base):
     notes = Column(String(250), nullable=True)
 
 class DatabaseManager:
+    SQLITE_CONNECT_ARGS = {"check_same_thread": False, "timeout": 30}
+
     def __init__(self):
         try:
-            from sqlalchemy import event
-            # Use connect_args to increase timeout and allow multi-thread access
-            self.engine = create_engine(
-                config.DATABASE_URL, 
-                connect_args={"check_same_thread": False, "timeout": 30}
-            )
-            
-            # Enable WAL mode for better concurrency
-            @event.listens_for(self.engine, "connect")
-            def set_sqlite_pragma(dbapi_connection, connection_record):
-                cursor = dbapi_connection.cursor()
-                cursor.execute("PRAGMA journal_mode=WAL")
-                cursor.execute("PRAGMA synchronous=NORMAL")
-                cursor.execute("PRAGMA busy_timeout=30000")
-                cursor.close()
+            database_url = make_url(config.DATABASE_URL)
+            engine_kwargs = {}
+
+            if database_url.get_backend_name() == "sqlite":
+                engine_kwargs["connect_args"] = self.SQLITE_CONNECT_ARGS
+
+            self.engine = create_engine(config.DATABASE_URL, **engine_kwargs)
+
+            if database_url.get_backend_name() == "sqlite":
+                self._register_sqlite_pragmas()
 
             Base.metadata.create_all(self.engine, checkfirst=True)
             self._migrate_schema()
@@ -94,6 +92,19 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
             raise
+
+    def _register_sqlite_pragmas(self):
+        """Register SQLite-only PRAGMA settings for every new DB-API connection."""
+
+        @event.listens_for(self.engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            try:
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA busy_timeout=30000")
+            finally:
+                cursor.close()
 
     def _migrate_schema(self):
         """Add any missing columns to existing tables (lightweight migration)."""
