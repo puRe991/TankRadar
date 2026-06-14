@@ -6,16 +6,31 @@ logger = logging.getLogger("TankRadar.Autostart")
 
 class AutostartManager:
     def __init__(self):
-        self.startup_folder = os.path.join(os.environ['APPDATA'], r"Microsoft\Windows\Start Menu\Programs\Startup")
         self.shortcut_name = "TankRadar.lnk"
-        self.shortcut_path = os.path.join(self.startup_folder, self.shortcut_name)
-        # Assuming we are in the project root
         self.target_path = os.path.abspath("start_tankradar.bat")
+        self.startup_folder = self._get_startup_folder()
+        self.shortcut_path = (
+            os.path.join(self.startup_folder, self.shortcut_name)
+            if self.startup_folder
+            else None
+        )
+
+    @staticmethod
+    def _get_startup_folder():
+        """Return the Windows startup folder, or None on unsupported systems."""
+        appdata = os.environ.get('APPDATA')
+        if not appdata:
+            return None
+        return os.path.join(appdata, r"Microsoft\Windows\Start Menu\Programs\Startup")
 
     def is_enabled(self):
-        return os.path.exists(self.shortcut_path)
+        return bool(self.shortcut_path and os.path.exists(self.shortcut_path))
 
     def set_autostart(self, enable: bool):
+        if not self.shortcut_path:
+            logger.warning("Autostart is only available on Windows with APPDATA set.")
+            return False
+
         if enable:
             if self.is_enabled():
                 return True
