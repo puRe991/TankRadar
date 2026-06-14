@@ -88,18 +88,6 @@ class TankRadarDashboard:
                             className='dash-checklist'
                         )
                     ]),
-                    html.Label("Kraftstoffart", className='input-label'),
-                    dcc.Dropdown(
-                        id='fuel-type-selector',
-                        options=[
-                            {'label': 'Super E5', 'value': 'e5'},
-                            {'label': 'Super E10', 'value': 'e10'},
-                            {'label': 'Super Plus', 'value': 'e5p'},
-                            {'label': 'Diesel', 'value': 'diesel'}
-                        ],
-                        value='e10',
-                        clearable=False
-                    )
                 ])
             ]),
 
@@ -123,15 +111,35 @@ class TankRadarDashboard:
                                 html.H2("Preisentwicklung", style={'margin': '0', 'fontSize': '1.8rem', 'fontWeight': '700'}),
                                 html.Span(id='selected-station-name', style={'color': 'var(--text-dim)', 'fontWeight': '500'})
                             ]),
-                            html.Div(className='station-selector-panel', children=[
-                                html.Label("Tankstelle auswählen", className='input-label', style={'marginBottom': '6px', 'display': 'block'}),
-                                dcc.Dropdown(
-                                    id='dashboard-station-selector',
-                                    options=self._get_station_options(),
-                                    value=self._get_default_station_id(),
-                                    clearable=False,
-                                    placeholder='Keine Tankstellen vorhanden'
-                                )
+                            html.Div(className='dashboard-selector-panel', children=[
+                                html.Div(className='dashboard-selector-group station-selector-group', children=[
+                                    html.Label("Tankstelle", className='input-label', style={'marginBottom': '6px', 'display': 'block'}),
+                                    dcc.Dropdown(
+                                        id='dashboard-station-selector',
+                                        options=self._get_station_options(),
+                                        value=self._get_default_station_id(),
+                                        clearable=False,
+                                        searchable=True,
+                                        placeholder='Keine Tankstellen vorhanden',
+                                        className='dash-dropdown'
+                                    )
+                                ]),
+                                html.Div(className='dashboard-selector-group fuel-selector-group', children=[
+                                    html.Label("Kraftstoffart", className='input-label', style={'marginBottom': '6px', 'display': 'block'}),
+                                    dcc.Dropdown(
+                                        id='fuel-type-selector',
+                                        options=[
+                                            {'label': 'Super E5', 'value': 'e5'},
+                                            {'label': 'Super E10', 'value': 'e10'},
+                                            {'label': 'Super Plus', 'value': 'e5p'},
+                                            {'label': 'Diesel', 'value': 'diesel'}
+                                        ],
+                                        value='e10',
+                                        clearable=False,
+                                        searchable=False,
+                                        className='dash-dropdown'
+                                    )
+                                ])
                             ])
                         ]),
                         # Next-scrape countdown bar
