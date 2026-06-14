@@ -498,18 +498,29 @@ input:focus, .Select-control:focus {
     margin-bottom: 14px;
 }
 
-.station-selector-panel {
-    width: min(420px, 100%);
-    flex: 0 1 420px;
+.dashboard-selector-panel {
+    display: grid;
+    grid-template-columns: minmax(280px, 1.4fr) minmax(180px, 0.8fr);
+    gap: 14px;
+    width: min(680px, 100%);
+    flex: 0 1 680px;
+    padding: 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.03);
 }
 
-.station-selector-panel .dash-dropdown,
-.station-selector-panel .Select-control {
+.dashboard-selector-group {
+    min-width: 0;
+}
+
+.dashboard-selector-panel .dash-dropdown,
+.dashboard-selector-panel .Select-control {
     min-height: 46px;
 }
 
-.station-selector-panel .Select-value-label,
-.station-selector-panel .Select-placeholder,
+.dashboard-selector-panel .Select-value-label,
+.dashboard-selector-panel .Select-placeholder,
 .Select-menu-outer,
 .Select-option,
 .VirtualizedSelectOption {
@@ -525,12 +536,13 @@ input:focus, .Select-control:focus {
     :root { --sidebar-width: 270px; }
     .main-content { padding: 24px; }
     .graph-header { flex-direction: column; }
-    .station-selector-panel { width: 100%; flex-basis: auto; }
+    .dashboard-selector-panel { width: 100%; flex-basis: auto; }
     .metric-row { flex-direction: column; gap: 16px; }
 }
 
 @media (max-width: 760px) {
     .app-container { flex-direction: column; }
+    .dashboard-selector-panel { grid-template-columns: 1fr; }
     .sidebar {
         position: relative;
         width: 100%;
