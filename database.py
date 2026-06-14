@@ -8,12 +8,12 @@ from datetime import datetime
 import config
 
 # Setup professional logging
-os.makedirs("logs", exist_ok=True)
+os.makedirs(config.LOG_DIR, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     handlers=[
-        logging.FileHandler("logs/database.log"),
+        logging.FileHandler(config.DATABASE_LOG_FILE),
         logging.StreamHandler()
     ]
 )

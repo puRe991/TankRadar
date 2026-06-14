@@ -4,6 +4,7 @@ import csv
 import os
 import logging
 import time
+import config
 from datetime import datetime
 from typing import Optional
 
@@ -18,7 +19,7 @@ log = logging.getLogger(__name__)
 # --- Konfiguration ---
 DEFAULT_PLZ   = os.environ.get("TANKRADAR_PLZ", "35444")
 DISTANCE      = int(os.environ.get("TANKRADAR_DISTANCE", "10"))
-CSV_FILE      = os.environ.get("TANKRADAR_CSV", "prices_history.csv")
+CSV_FILE      = str(config.PRICE_HISTORY_CSV)
 MAX_RETRIES   = 3
 RETRY_DELAY   = 5   # Sekunden zwischen Retries
 PAGE_DELAY    = 0.5 # Sekunden zwischen Seiten-Requests (Rate-Limit-Schutz)

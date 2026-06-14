@@ -40,7 +40,7 @@ class TankRadarDashboard:
         self._app_start_ts = time.time()
         self.app = Dash(
             __name__,
-            assets_folder='assets',
+            assets_folder=str(config.ASSETS_DIR),
             suppress_callback_exceptions=True,
             serve_locally=True,
             eager_loading=True,

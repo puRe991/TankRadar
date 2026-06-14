@@ -1,11 +1,20 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 
+BASE_DIR = Path(__file__).resolve().parent
+LOG_DIR = BASE_DIR / "logs"
+DATABASE_LOG_FILE = LOG_DIR / "database.log"
+ASSETS_DIR = BASE_DIR / "assets"
+PRICE_HISTORY_CSV = Path(
+    os.getenv("TANKRADAR_CSV", str(BASE_DIR / "prices_history.csv"))
+).expanduser()
+
 # Database Configuration
 # Use SQLite by default for easy setup, or PostgreSQL if URL is provided
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///tankradar.db")
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'tankradar.db'}")
 
 # Update Interval in minutes (Still used for dashboard refresh interval)
 UPDATE_INTERVAL = 5
