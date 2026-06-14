@@ -47,6 +47,7 @@ class FuelModelEvaluator:
 
     MODEL_LABELS = {
         "prophet": "Prophet",
+        "adaptive_daily_pattern": "Adaptives Tagesmuster",
         "hourly_baseline": "Stundenmittel-Fallback",
         "last_price": "Naive Baseline: letzter Preis",
         "typical_daily_minimum": "Naive Baseline: typisches Tagesminimum",
@@ -96,7 +97,7 @@ class FuelModelEvaluator:
         if not cutoffs:
             return self._empty_summary("Zu wenig Historie mit nachfolgendem 24h-Fenster für ein Backtesting.")
 
-        methods = ["prophet", "hourly_baseline", "last_price", "typical_daily_minimum"]
+        methods = ["prophet", "adaptive_daily_pattern", "hourly_baseline", "last_price", "typical_daily_minimum"]
         results = []
         for method in methods:
             results.append(
@@ -104,7 +105,14 @@ class FuelModelEvaluator:
             )
 
         available_results = [item for item in results if item["evaluated_windows"] > 0 and item["mae"] is not None]
-        best_result = min(available_results, key=lambda item: item["mae"], default=None)
+        best_result = max(
+            available_results,
+            key=lambda item: (
+                item["cheapest_window_accuracy"] if item["cheapest_window_accuracy"] is not None else -1,
+                -item["mae"],
+            ),
+            default=None,
+        )
 
         return {
             "status": "ok" if available_results else "unavailable",

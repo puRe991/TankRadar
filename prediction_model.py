@@ -28,7 +28,7 @@ class FuelPredictionModel:
 
         if self._prophet_available:
             return self._predict_with_prophet(prepared_df)
-        return self._predict_with_hourly_baseline(prepared_df)
+        return self._predict_with_adaptive_daily_pattern(prepared_df)
 
     def predict_next_24h_with_method(self, df, method):
         """Predict the next 24 hours with a specific forecasting approach.
@@ -45,6 +45,8 @@ class FuelPredictionModel:
             if not self._prophet_available:
                 return None
             return self._predict_with_prophet(prepared_df)
+        if method == "adaptive_daily_pattern":
+            return self._predict_with_adaptive_daily_pattern(prepared_df)
         if method == "hourly_baseline":
             return self._predict_with_hourly_baseline(prepared_df)
         if method == "last_price":
@@ -96,6 +98,91 @@ class FuelPredictionModel:
         result["yhat_upper"] = result["yhat_upper"].clip(lower=1.0, upper=3.0)
 
         return self._format_prediction_result(result, model_name="Prophet")
+
+    def _predict_with_adaptive_daily_pattern(self, df):
+        """Forecast using recency-weighted daily price patterns.
+
+        Fuel prices usually follow station-specific intraday cycles, while the
+        absolute price level can shift quickly.  This model therefore learns
+        hourly deviations from each day's median price and applies that shape to
+        the latest observed level.  Recent observations receive higher weight so
+        the cheapest-hour recommendation adapts when a station changes its
+        pricing rhythm.
+        """
+        now = df["timestamp"].max()
+        current_price = float(df["price"].iloc[-1])
+
+        features = df.copy()
+        features["hour"] = features["timestamp"].dt.hour
+        features["date"] = features["timestamp"].dt.date
+        features["weekday"] = features["timestamp"].dt.weekday
+        features["daily_median"] = features.groupby("date")["price"].transform("median")
+        features["hourly_delta"] = features["price"] - features["daily_median"]
+
+        age_hours = (now - features["timestamp"]).dt.total_seconds() / 3600
+        # Seven-day half-life: old data still helps with 1,140 points, but the
+        # most recent pricing pattern dominates the recommendation.
+        features["weight"] = 0.5 ** (age_hours / (24 * 7))
+
+        global_delta = self._weighted_mean(features["hourly_delta"], features["weight"], default=0.0)
+        hourly_delta = self._weighted_group_mean(features, "hour", "hourly_delta", "weight")
+        weekday_hour_delta = self._weighted_group_mean(
+            features, ["weekday", "hour"], "hourly_delta", "weight"
+        )
+
+        recent_window_start = now - pd.Timedelta(hours=6)
+        recent_median = features.loc[features["timestamp"] >= recent_window_start, "price"].median()
+        if pd.isna(recent_median):
+            recent_median = current_price
+        level = (float(recent_median) * 0.7) + (current_price * 0.3)
+
+        residuals = []
+        for _, row in features.iterrows():
+            key = (int(row["weekday"]), int(row["hour"]))
+            pattern_delta = weekday_hour_delta.get(key, hourly_delta.get(int(row["hour"]), global_delta))
+            residuals.append(float(row["hourly_delta"]) - float(pattern_delta))
+        residual_series = pd.Series(residuals, dtype=float).abs().dropna()
+        residual_quantile = float(residual_series.quantile(0.75)) if not residual_series.empty else 0.03
+        base_uncertainty = max(0.02, min(0.12, residual_quantile))
+
+        forecast_rows = []
+        for offset in range(1, 25):
+            forecast_time = now + timedelta(hours=offset)
+            key = (forecast_time.weekday(), forecast_time.hour)
+            hour_delta = hourly_delta.get(forecast_time.hour, global_delta)
+            delta = (weekday_hour_delta.get(key, hour_delta) * 0.65) + (hour_delta * 0.35)
+            predicted_price = max(1.0, min(3.0, level + float(delta)))
+            forecast_rows.append(
+                {
+                    "ds": forecast_time,
+                    "yhat": predicted_price,
+                    "yhat_lower": max(1.0, predicted_price - base_uncertainty),
+                    "yhat_upper": min(3.0, predicted_price + base_uncertainty),
+                }
+            )
+
+        result = pd.DataFrame(forecast_rows)
+        return self._format_prediction_result(result, model_name="Adaptives Tagesmuster")
+
+    def _weighted_group_mean(self, df, group_columns, value_column, weight_column):
+        grouped_values = {}
+        for group_key, group in df.groupby(group_columns):
+            if not isinstance(group_key, tuple):
+                group_key = int(group_key)
+            grouped_values[group_key] = self._weighted_mean(
+                group[value_column], group[weight_column], default=float(group[value_column].mean())
+            )
+        return grouped_values
+
+    def _weighted_mean(self, values, weights, default=0.0):
+        valid = pd.DataFrame({"value": values, "weight": weights}).dropna()
+        valid = valid[valid["weight"] > 0]
+        if valid.empty:
+            return default
+        weight_sum = float(valid["weight"].sum())
+        if weight_sum <= 0:
+            return default
+        return float((valid["value"] * valid["weight"]).sum() / weight_sum)
 
     def _predict_with_hourly_baseline(self, df):
         """Fallback forecast based on recent hourly averages and the current price level."""
