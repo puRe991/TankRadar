@@ -176,3 +176,66 @@ def test_bulk_import_cloud_prices_defers_flush_until_commit(tmp_path, monkeypatc
     assert stats["inserted"] == 2
     assert stats["stations_upserted"] == 2
     assert flush_count == 1
+
+
+def test_database_manager_uses_sqlite_connect_args_and_pragmas(tmp_path, monkeypatch):
+    import database
+
+    db_path = tmp_path / "tankradar.db"
+    engine = object()
+    create_engine_calls = []
+    pragma_registered = []
+
+    def fake_create_engine(*args, **kwargs):
+        create_engine_calls.append((args, kwargs))
+        return engine
+
+    monkeypatch.setattr(config, "DATABASE_URL", f"sqlite:///{db_path}")
+    monkeypatch.setattr(database, "create_engine", fake_create_engine)
+    monkeypatch.setattr(database.Base.metadata, "create_all", lambda *args, **kwargs: None)
+    monkeypatch.setattr(database.DatabaseManager, "_migrate_schema", lambda self: None)
+    monkeypatch.setattr(
+        database.DatabaseManager,
+        "_register_sqlite_pragmas",
+        lambda self: pragma_registered.append(self.engine),
+    )
+
+    db = database.DatabaseManager()
+
+    assert db.engine is engine
+    assert create_engine_calls == [
+        (
+            (f"sqlite:///{db_path}",),
+            {"connect_args": {"check_same_thread": False, "timeout": 30}},
+        )
+    ]
+    assert pragma_registered == [engine]
+
+
+def test_database_manager_omits_sqlite_options_for_postgresql_url(monkeypatch):
+    import database
+
+    database_url = "postgresql://user:pass@localhost/db"
+    engine = object()
+    create_engine_calls = []
+    pragma_registered = []
+
+    def fake_create_engine(*args, **kwargs):
+        create_engine_calls.append((args, kwargs))
+        return engine
+
+    monkeypatch.setattr(config, "DATABASE_URL", database_url)
+    monkeypatch.setattr(database, "create_engine", fake_create_engine)
+    monkeypatch.setattr(database.Base.metadata, "create_all", lambda *args, **kwargs: None)
+    monkeypatch.setattr(database.DatabaseManager, "_migrate_schema", lambda self: None)
+    monkeypatch.setattr(
+        database.DatabaseManager,
+        "_register_sqlite_pragmas",
+        lambda self: pragma_registered.append(self.engine),
+    )
+
+    db = database.DatabaseManager()
+
+    assert db.engine is engine
+    assert create_engine_calls == [((database_url,), {})]
+    assert pragma_registered == []
