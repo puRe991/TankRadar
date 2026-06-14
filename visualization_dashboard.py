@@ -467,6 +467,29 @@ class TankRadarDashboard:
         station_ids = getattr(config, 'STATION_IDS', [])
         return station_ids[0] if station_ids else None
 
+    def _resolve_dashboard_station_id(self, stored_station_id, dropdown_station_id):
+        """Return the station that should drive dashboard widgets.
+
+        The dashboard historically depended only on ``station-selection-store``.
+        In practice the visible dropdown is the user's primary control; if the
+        store update is missed or delayed, the graph can keep showing the old
+        station although the dropdown already displays another one. Prefer the
+        component that triggered the callback and fall back to the currently
+        valid value from the other component.
+        """
+        triggered_prop = callback_context.triggered[0]['prop_id'] if callback_context.triggered else ""
+        candidates = (
+            (stored_station_id, dropdown_station_id)
+            if triggered_prop.startswith('station-selection-store.')
+            else (dropdown_station_id, stored_station_id)
+        )
+
+        valid_station_ids = {str(option['value']) for option in self._get_station_options()}
+        for station_id in candidates:
+            if station_id is not None and str(station_id) in valid_station_ids:
+                return str(station_id)
+        return None
+
     def _get_station_grid_content(self, fuel_type, selected_id=None):
         stations = self.db.get_all_stations()
         if not stations:
@@ -596,10 +619,10 @@ class TankRadarDashboard:
         )
         def sync_station_selector(_interval, selected_id, fuel_type, _save, _sync, _scrape_ts):
             options = self._get_station_options(fuel_type)
-            option_values = [option['value'] for option in options]
-            if selected_id in option_values:
-                return options, selected_id
-            fallback = option_values[0] if option_values else None
+            option_values = {str(option['value']): option['value'] for option in options}
+            if selected_id is not None and str(selected_id) in option_values:
+                return options, option_values[str(selected_id)]
+            fallback = next(iter(option_values.values()), None)
             return options, fallback
 
         # Callback to handle station selection from the top dropdown.
@@ -704,17 +727,19 @@ class TankRadarDashboard:
              Output('prediction-summary', 'children'),
              Output('selected-station-name', 'children')],
             [Input('station-selection-store', 'data'),
+             Input('dashboard-station-selector', 'value'),
              Input('fuel-type-selector', 'value'),
              Input('interval-component', 'n_intervals'),
              Input('save-price', 'n_clicks')]
         )
-        def update_dashboard(station_id, fuel_type, _, _n2):
+        def update_dashboard(stored_station_id, dropdown_station_id, fuel_type, _, _n2):
+            station_id = self._resolve_dashboard_station_id(stored_station_id, dropdown_station_id)
             if not station_id:
                 return go.Figure(), [], ""
 
             try:
                 stations = self.db.get_all_stations()
-                station = next((s for s in stations if s.id == station_id), None)
+                station = next((s for s in stations if str(s.id) == str(station_id)), None)
                 s_display_name = f"{station.brand or ''} {station.name}" if station else f"Station {station_id}"
 
                 history_df = self.db.get_historical_data(station_id, days=90)
