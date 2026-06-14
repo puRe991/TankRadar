@@ -35,6 +35,7 @@ def test_backtest_compares_fallback_and_naive_models_without_prophet():
     assert summary["cutoff_count"] == 4
     labels = {item["label"] for item in summary["models"]}
     assert "Prophet" in labels
+    assert "Adaptives Tagesmuster" in labels
     assert "Stundenmittel-Fallback" in labels
     assert "Naive Baseline: letzter Preis" in labels
     assert summary["best_model"]["mae"] >= 0

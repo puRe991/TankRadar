@@ -17,7 +17,7 @@ def _price_history(rows=None):
     )
 
 
-def test_hourly_baseline_prediction_without_prophet():
+def test_adaptive_pattern_prediction_without_prophet():
     model = FuelPredictionModel()
     model._prophet_available = False
 
@@ -46,4 +46,21 @@ def test_explicit_baseline_prediction_contains_uncertainty_metadata():
     assert prediction is not None
     assert prediction["model_name"] == "Naive Baseline: letzter Preis"
     assert prediction["best_price_lower"] <= prediction["best_price"] <= prediction["best_price_upper"]
+    assert prediction["best_uncertainty"] is not None
+
+
+def test_adaptive_daily_pattern_uses_recurring_cheapest_hour():
+    model = FuelPredictionModel()
+    start = datetime(2026, 6, 1)
+    rows = []
+    for hour in range(7 * 24):
+        timestamp = start + timedelta(hours=hour)
+        price = 1.80 + abs(timestamp.hour - 3) * 0.006
+        rows.append({"timestamp": timestamp, "price": price})
+
+    prediction = model.predict_next_24h_with_method(pd.DataFrame(rows), "adaptive_daily_pattern")
+
+    assert prediction is not None
+    assert prediction["model_name"] == "Adaptives Tagesmuster"
+    assert prediction["best_time"].hour == 3
     assert prediction["best_uncertainty"] is not None
