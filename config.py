@@ -1,8 +1,11 @@
 import os
+from importlib.util import find_spec
 from pathlib import Path
-from dotenv import load_dotenv
 
-load_dotenv()
+if find_spec("dotenv") is not None:
+    from dotenv import load_dotenv
+
+    load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
 LOG_DIR = BASE_DIR / "logs"
