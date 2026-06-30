@@ -139,7 +139,7 @@ class FuelModelEvaluator:
             train = prepared[prepared["timestamp"] <= cutoff]
             actual = prepared[
                 (prepared["timestamp"] > cutoff)
-                & (prepared["timestamp"] <= cutoff + pd.Timedelta(hours=horizon_hours))
+                & (prepared["timestamp"] <= cutoff + pd.Timedelta(horizon_hours, unit="h"))
             ]
             if len(train) < config.MIN_DATA_POINTS_FOR_ML or actual.empty:
                 continue
@@ -214,7 +214,7 @@ class FuelModelEvaluator:
         if len(prepared) < min_train_points + 2:
             return []
 
-        latest_cutoff = prepared["timestamp"].max() - pd.Timedelta(hours=horizon_hours)
+        latest_cutoff = prepared["timestamp"].max() - pd.Timedelta(horizon_hours, unit="h")
         candidates = prepared.iloc[min_train_points - 1 :]["timestamp"]
         candidates = candidates[candidates <= latest_cutoff].drop_duplicates().sort_values()
         if candidates.empty:

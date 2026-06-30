@@ -130,7 +130,7 @@ class FuelPredictionModel:
             features, ["weekday", "hour"], "hourly_delta", "weight"
         )
 
-        recent_window_start = now - pd.Timedelta(hours=6)
+        recent_window_start = now - pd.Timedelta(6, unit="h")
         recent_median = features.loc[features["timestamp"] >= recent_window_start, "price"].median()
         if pd.isna(recent_median):
             recent_median = current_price

@@ -198,17 +198,6 @@ class TankRadarDashboard:
                             ])
                         ])
                     ]),
-                    html.Div(className='glass-card chart-card forecast-card', children=[
-                        html.Div(className='panel-head', children=[
-                            html.H2('Optimal Refueling Forecast'),
-                            html.Span('24 Stunden', className='status-pill')
-                        ]),
-                        dcc.Graph(
-                            id='forecast-graph',
-                            config={'displayModeBar': 'hover', 'responsive': True},
-                            style={'width': '100%', 'height': '360px'}
-                        )
-                    ]),
                     html.Div(className='glass-card side-panel stations-panel', children=[
                         html.Div(className='panel-head', children=[html.H2('📍 Nearby Stations'), html.Span('Live', className='status-pill')]),
                         html.Div(id='nearby-stations-table', children=self._build_nearby_station_table())
@@ -227,17 +216,6 @@ class TankRadarDashboard:
                         html.H2('Meta Prophet'), html.Span('Active', className='status-pill'),
                         html.P('Prognosen werden aus vorhandenen Stationshistorien berechnet.'), html.P('Bei fehlender Historie blendet TankRadar belastbare Hinweise statt Demo-Werte ein.')
                     ]),
-                    ]),
-                    html.Div(className='glass-card overview-compliance-card', children=[
-                        html.Div(className='panel-head', children=[
-                            html.H2('Preis-Prüffälle'),
-                            html.Button('📄 Beschwerdeanlage als PDF', id='download-compliance-pdf-overview', className='btn-primary mini-btn')
-                        ]),
-                        html.Div(id='overview-compliance-table')
-                    ]),
-                    html.Div(className='glass-card project-structure-card', children=[
-                        html.Div(className='panel-head', children=[html.H2('Project Structure'), html.Span('Live Modules', className='status-pill')]),
-                        html.Div(id='project-structure', className='module-strip', children=self._build_project_structure())
                     ]),
                     
                     # Insight Engine (Statistics Section)
@@ -476,133 +454,6 @@ class TankRadarDashboard:
                 ])
             ])
         ])
-
-    def _empty_figure(self, message="Keine Daten verfügbar"):
-        fig = go.Figure()
-        fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            xaxis={"visible": False},
-            yaxis={"visible": False},
-            annotations=[{
-                "text": message, "xref": "paper", "yref": "paper",
-                "x": 0.5, "y": 0.5, "showarrow": False,
-                "font": {"color": "#9fb1c7", "size": 14},
-            }],
-            margin=dict(l=20, r=20, t=20, b=20),
-            height=360,
-        )
-        return fig
-
-    def _format_plain_price(self, value):
-        if value is None or pd.isna(value):
-            return "—"
-        return f"{float(value):.3f}".replace('.', ',')
-
-    def _build_project_structure(self):
-        modules = [
-            'data_collector.py', 'database.py', 'analysis_engine.py',
-            'prediction_model.py', 'visualization_dashboard.py', 'main.py', 'config.py'
-        ]
-        return [
-            html.Div(className='module-chip', children=[html.Span('🐍'), html.Span(module)])
-            for module in modules
-            if (config.BASE_DIR / module).exists()
-        ]
-
-    def _build_overview_compliance_table(self, limit=5):
-        cases = self.db.get_price_change_cases(days=30)
-        if cases.empty:
-            return html.Div('Keine Preis-Prüffälle in den letzten 30 Tagen gefunden.', className='empty-state')
-        display_columns = ['case_id', 'timestamp', 'station_name', 'address', 'fuel_type', 'previous_price', 'new_price', 'difference']
-        available = [column for column in display_columns if column in cases.columns]
-        visible = cases.sort_values('timestamp', ascending=False).head(limit)[available].copy()
-        rename = {
-            'case_id': 'Vorgangsnummer', 'timestamp': 'Zeitpunkt', 'station_name': 'Tankstelle',
-            'address': 'Anschrift', 'fuel_type': 'Kraftstoffart', 'previous_price': 'Vorpreis',
-            'new_price': 'Neuer Preis', 'difference': 'Differenz'
-        }
-        for column in ['previous_price', 'new_price', 'difference']:
-            if column in visible:
-                visible[column] = visible[column].apply(lambda value: f"{float(value):+.3f} €".replace('.', ',') if column == 'difference' else f"{float(value):.3f} €".replace('.', ','))
-        if 'timestamp' in visible:
-            visible['timestamp'] = pd.to_datetime(visible['timestamp'], errors='coerce').dt.strftime('%d.%m.%Y %H:%M')
-        if 'fuel_type' in visible:
-            visible['fuel_type'] = visible['fuel_type'].map(FUEL_LABELS).fillna(visible['fuel_type'])
-        return dash_table.DataTable(
-            columns=[{'name': rename.get(column, column), 'id': column} for column in visible.columns],
-            data=visible.to_dict('records'),
-            page_size=limit,
-            style_table={'overflowX': 'auto'},
-            style_cell={'backgroundColor': 'rgba(9,22,38,.94)', 'color': '#dce9f7', 'border': '0', 'fontFamily': 'Arial', 'fontSize': '12px', 'padding': '8px'},
-            style_header={'backgroundColor': 'rgba(17,35,58,.95)', 'color': '#ffffff', 'fontWeight': '700', 'border': '0'},
-            style_data_conditional=[{'if': {'column_id': 'difference'}, 'color': '#ff6b5f', 'fontWeight': '800'}],
-        )
-
-    def _build_forecast_figure(self, fuel_df, prediction, current_price):
-        if not prediction or prediction.get('forecast') is None:
-            return self._empty_figure('Noch keine belastbare 24h-Prognose verfügbar')
-        forecast_df = prediction['forecast'].copy()
-        forecast_df = forecast_df[(forecast_df['yhat'] >= 0.5) & (forecast_df['yhat'] <= 3.0)]
-        if forecast_df.empty:
-            return self._empty_figure('Prognose enthält keine plausiblen Preiswerte')
-        fig = go.Figure()
-        if {'yhat_lower', 'yhat_upper'}.issubset(forecast_df.columns):
-            fig.add_trace(go.Scatter(
-                x=list(forecast_df['ds']) + list(forecast_df['ds'])[::-1],
-                y=list(forecast_df['yhat_upper']) + list(forecast_df['yhat_lower'])[::-1],
-                fill='toself', fillcolor='rgba(45, 122, 255, .22)',
-                line={'color': 'rgba(255,255,255,0)'}, hoverinfo='skip', name='Konfidenzband'
-            ))
-        fig.add_trace(go.Scatter(
-            x=forecast_df['ds'], y=forecast_df['yhat'], mode='lines+markers',
-            name='Prognose', line={'color': '#38c8ff', 'width': 3, 'dash': 'dot'},
-            marker={'size': 6, 'color': '#38c8ff'},
-            hovertemplate='<b>%{x|%H:%M}</b><br>%{y:.3f} €/L<extra></extra>'
-        ))
-        best_time = prediction.get('best_time')
-        best_price = prediction.get('best_price')
-        if best_time is not None and best_price is not None:
-            fig.add_vline(x=best_time, line_color='#42e486', line_dash='dash', line_width=2)
-            fig.add_trace(go.Scatter(
-                x=[best_time], y=[best_price], mode='markers+text', text=['Best time'],
-                textposition='top right', marker={'size': 16, 'color': '#42e486'},
-                name='Beste Zeit', hovertemplate='<b>Beste Zeit</b><br>%{x|%H:%M}<br>%{y:.3f} €/L<extra></extra>'
-            ))
-        valid = [float(v) for v in forecast_df['yhat'].dropna().tolist()] + ([float(current_price)] if current_price is not None and pd.notna(current_price) else [])
-        padding = max(0.03, (max(valid) - min(valid)) * 0.15) if valid else 0.05
-        fig.update_layout(
-            template='plotly_dark', paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-            margin=dict(l=45, r=18, t=10, b=38), height=360,
-            font={'family': 'Arial, sans-serif', 'color': '#dce9f7'},
-            legend={'orientation': 'h', 'y': 1.08, 'x': 0},
-            xaxis={'showgrid': True, 'gridcolor': 'rgba(255,255,255,.08)', 'tickformat': '%H:%M'},
-            yaxis={'showgrid': True, 'gridcolor': 'rgba(255,255,255,.08)', 'tickformat': '.3f', 'range': [min(valid)-padding, max(valid)+padding] if valid else None},
-        )
-        return fig
-
-    def _build_overview_metrics(self, latest_df, fuel_type, current_price=None, prediction=None, evaluation=None):
-        fuel_latest = latest_df[latest_df['fuel_type'] == fuel_type] if not latest_df.empty and 'fuel_type' in latest_df else pd.DataFrame()
-        lowest = fuel_latest['price'].min() if not fuel_latest.empty else current_price
-        stations_count = len(self.db.get_all_stations())
-        best_label = '—'
-        savings = '—'
-        if prediction and prediction.get('best_time') is not None:
-            best_label = prediction['best_time'].strftime('%H:%M')
-            if current_price is not None and pd.notna(current_price):
-                savings = f"{max(0.0, float(current_price) - float(prediction['best_price'])) * 100:.1f} ct/l".replace('.', ',')
-        confidence = 'N/A'
-        if evaluation and evaluation.get('best_model'):
-            hit_rate = evaluation['best_model'].get('cheapest_window_accuracy')
-            if hit_rate is not None:
-                confidence = f"{hit_rate * 100:.0f} %"
-        return [
-            html.Div(className='metric-item reference-metric', children=[html.Div('◆', className='metric-icon green'), html.Div([html.Div([self._format_plain_price(lowest), html.Small(' €', className='metric-unit')], className='metric-value'), html.Div('Lowest Price Now', className='metric-label')])]),
-            html.Div(className='metric-item reference-metric', children=[html.Div('◷', className='metric-icon purple'), html.Div([html.Div(best_label, className='metric-value purple-text'), html.Div(f'Ersparnis: {savings}', className='metric-label')])]),
-            html.Div(className='metric-item reference-metric', children=[html.Div('⛽', className='metric-icon blue'), html.Div([html.Div(f'{stations_count:,}'.replace(',', '.'), className='metric-value blue-text'), html.Div('Stations Monitored', className='metric-label')])]),
-            html.Div(className='metric-item reference-metric', children=[html.Div('⌁', className='metric-icon yellow'), html.Div([html.Div(confidence, className='metric-value yellow-text'), html.Div('Prediction Confidence', className='metric-label')])]),
-        ]
 
     def _build_heatmap_cells(self):
         days = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']

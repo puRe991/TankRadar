@@ -51,3 +51,67 @@ def test_backtest_rejects_too_short_history():
 
     assert summary["status"] == "unavailable"
     assert summary["models"] == []
+
+
+def test_evaluate_from_database_filters_requested_fuel_type():
+    class FakeDb:
+        def get_historical_data(self, station_id, days=90):
+            assert station_id == "station-1"
+            assert days == 14
+            history = _evaluation_history(days=5)
+            other = history.copy()
+            other["fuel_type"] = "diesel"
+            other["price"] = other["price"] + 0.25
+            return pd.concat([history, other], ignore_index=True)
+
+    model = FuelPredictionModel()
+    model._prophet_available = False
+    evaluator = FuelModelEvaluator(model)
+
+    summary = evaluator.evaluate_from_database(FakeDb(), "station-1", "e10", days=14, max_cutoffs=3)
+
+    assert summary["status"] == "ok"
+    assert summary["cutoff_count"] == 3
+
+
+def test_evaluate_from_database_rejects_missing_station_or_fuel_type():
+    evaluator = FuelModelEvaluator(FuelPredictionModel())
+
+    assert evaluator.evaluate_from_database(object(), "", "e10")["status"] == "unavailable"
+    assert evaluator.evaluate_from_database(object(), "station-1", "")["status"] == "unavailable"
+
+
+def test_alignment_groups_actuals_by_hour_and_drops_invalid_forecast_rows():
+    evaluator = FuelModelEvaluator(FuelPredictionModel())
+    forecast = pd.DataFrame(
+        [
+            {"ds": "2026-06-01 10:20", "yhat": "1.70"},
+            {"ds": "invalid", "yhat": "1.99"},
+            {"ds": "2026-06-01 11:00", "yhat": "bad"},
+        ]
+    )
+    actual = pd.DataFrame(
+        [
+            {"timestamp": pd.Timestamp("2026-06-01 10:05"), "price": 1.60},
+            {"timestamp": pd.Timestamp("2026-06-01 10:55"), "price": 1.80},
+        ]
+    )
+
+    joined = evaluator._align_forecast_with_actuals(forecast, actual)
+
+    assert len(joined) == 1
+    assert round(float(joined.iloc[0]["actual_price"]), 3) == 1.70
+    assert joined.iloc[0]["yhat"] == 1.70
+
+
+def test_build_cutoffs_handles_edge_cases_and_even_spacing():
+    evaluator = FuelModelEvaluator(FuelPredictionModel())
+    prepared = _evaluation_history(days=4)[["timestamp", "price"]]
+
+    assert evaluator._build_cutoffs(prepared.head(5), 24, 3, 10) == []
+    one = evaluator._build_cutoffs(prepared, 24, 1, 10)
+    many = evaluator._build_cutoffs(prepared, 24, 5, 10)
+
+    assert len(one) == 1
+    assert len(many) == 5
+    assert many == sorted(many)
