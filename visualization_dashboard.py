@@ -58,11 +58,15 @@ class TankRadarDashboard:
         self.app.layout = html.Div(className='app-container', children=[
             # Sidebar
             html.Div(className='sidebar', children=[
-                html.Div(className='sidebar-brand', children=[
-                    html.H1("TankRadar")
+                html.Div(className='sidebar-brand brand-pro', children=[
+                    html.Div(className='brand-mark', children='◉'),
+                    html.Div(children=[
+                        html.H1("TankRadar"),
+                        html.P("German Fuel Price Tracker & Predictor", className='brand-subtitle')
+                    ])
                 ]),
                 
-                html.Div(className='sidebar-actions', children=[
+                html.Div(className='sidebar-actions admin-panel', children=[
                     html.P("Aktionen", className='input-label'),
                     html.Button("Bulk-Import", id='open-bulk-import', className='btn-primary', style={'width': '100%', 'marginBottom': '10px'}),
                     html.Button("Station +", id='open-add-station', className='btn-secondary', style={'width': '100%', 'marginBottom': '10px'}),
@@ -75,16 +79,18 @@ class TankRadarDashboard:
                     html.Div(id='scraper-status', style={'fontSize': '0.8rem', 'color': 'var(--text-dim)', 'marginTop': '5px'})
                 ]),
 
-                html.Div(className='sidebar-navigation', style={'marginTop': '20px'}, children=[
-                    html.P("Ansicht", className='input-label'),
-                    html.Button("🔍 Radar", id='btn-nav-radar', className='btn-primary', style={'width': '100%', 'marginBottom': '10px'}),
-                    html.Button("📖 Tank-Tagebuch", id='btn-nav-logbook', className='btn-secondary', style={'width': '100%', 'marginBottom': '10px'}),
-                    html.Button("⚠️ Preis-Prüffälle", id='btn-nav-compliance', className='btn-secondary', style={'width': '100%'})
+                html.Div(className='sidebar-navigation nav-pro', style={'marginTop': '20px'}, children=[
+                    html.Button([html.Span("▦", className='nav-icon'), "Overview"], id='btn-nav-radar', className='btn-primary nav-item', style={'width': '100%', 'marginBottom': '10px'}),
+                    html.Button([html.Span("⌁", className='nav-icon'), "Tank-Tagebuch"], id='btn-nav-logbook', className='btn-secondary nav-item', style={'width': '100%', 'marginBottom': '10px'}),
+                    html.Button([html.Span("▥", className='nav-icon'), "Preis-Prüffälle"], id='btn-nav-compliance', className='btn-secondary nav-item', style={'width': '100%'})
                 ]),
 
                 dcc.Store(id='current-view-store', data='radar'),
 
                 html.Div(className='sidebar-settings', style={'marginTop': 'auto'}, children=[
+                    html.Div(className='region-card', children=[html.Span('⌖'), html.Div([html.Div('Region'), html.Small('Deutschland (DE)')]), html.Span('⌄')]),
+                    html.Div(className='dark-row', children=[html.Span('☾'), html.Span('Dark Mode'), html.Span(className='toggle-on')]),
+                    html.Div(className='copyright', children=['© 2025 TankRadar', html.Br(), 'All rights reserved.']),
                     html.Div(style={'marginBottom': '20px', 'padding': '15px', 'background': 'rgba(255,255,255,0.03)', 'borderRadius': '12px', 'border': '1px solid var(--border-light)'}, children=[
                         html.Label("Windows Autostart", className='input-label', style={'marginBottom': '10px', 'display': 'block'}),
                         dcc.Checklist(
@@ -108,10 +114,11 @@ class TankRadarDashboard:
                     html.Div(id='stale-data-banner', className='stale-data-banner', style={'display': 'none'}),
 
                     # Top Analytics Row
-                    html.Div(id='prediction-summary', className='metric-row'),
+                    html.Div(id='prediction-summary', className='metric-row hero-metrics'),
 
+                    html.Div(className='dashboard-grid', children=[
                     # Graph Card
-                    html.Div(className='glass-card', children=[
+                    html.Div(className='glass-card chart-card live-card', children=[
                         html.Div(className='graph-header', children=[
                             html.Div(children=[
                                 html.H2("Preisentwicklung", style={'margin': '0', 'fontSize': '1.8rem', 'fontWeight': '700'}),
@@ -170,7 +177,7 @@ class TankRadarDashboard:
                                 'responsive': True,
                                 'scrollZoom': True
                             },
-                            style={'width': '100%', 'height': '500px'}
+                            style={'width': '100%', 'height': '360px'}
                         ),
                         
                         # Price Calculator Widget
@@ -190,6 +197,25 @@ class TankRadarDashboard:
                                 ])
                             ])
                         ])
+                    ]),
+                    html.Div(className='glass-card side-panel stations-panel', children=[
+                        html.Div(className='panel-head', children=[html.H2('📍 Nearby Stations'), html.Span('Live', className='status-pill')]),
+                        html.Div(id='nearby-stations-table', children=self._build_nearby_station_table())
+                    ]),
+                    html.Div(className='glass-card heatmap-panel', children=[
+                        html.H2('Cheapest Hours by Day'),
+                        html.Div(className='heatmap-grid', children=self._build_heatmap_cells())
+                    ]),
+                    html.Div(className='glass-card source-panel', children=[
+                        html.H2('Data Sources'),
+                        html.Div(className='source-item', children=[html.Strong('ADAC'), html.Span('Live Preise')]),
+                        html.Div(className='source-item', children=[html.Strong('PLZ 10KM'), html.Span('Geografische Aggregation')]),
+                        html.Small('Status basiert auf den zuletzt gespeicherten Live-Daten ●')
+                    ]),
+                    html.Div(className='glass-card model-panel', children=[
+                        html.H2('Meta Prophet'), html.Span('Active', className='status-pill'),
+                        html.P('Prognosen werden aus vorhandenen Stationshistorien berechnet.'), html.P('Bei fehlender Historie blendet TankRadar belastbare Hinweise statt Demo-Werte ein.')
+                    ]),
                     ]),
                     
                     # Insight Engine (Statistics Section)
@@ -428,6 +454,63 @@ class TankRadarDashboard:
                 ])
             ])
         ])
+
+    def _build_heatmap_cells(self):
+        days = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+        hours = list(range(0, 24, 2))
+        cells = [html.Div('', className='heatmap-corner')] + [html.Div(f'{hour:02d}', className='heatmap-label') for hour in hours]
+        try:
+            latest_station = self._get_default_station_id()
+            history_df = self.db.get_historical_data(latest_station, days=90) if latest_station else pd.DataFrame()
+            if not history_df.empty:
+                history_df = history_df.copy()
+                history_df['timestamp'] = pd.to_datetime(history_df['timestamp'], errors='coerce')
+                history_df = history_df.dropna(subset=['timestamp', 'price'])
+                history_df['weekday'] = history_df['timestamp'].dt.weekday
+                history_df['hour_bucket'] = (history_df['timestamp'].dt.hour // 2) * 2
+                grouped = history_df.groupby(['weekday', 'hour_bucket'])['price'].mean()
+                min_price = float(grouped.min())
+                max_price = float(grouped.max())
+            else:
+                grouped = pd.Series(dtype=float)
+                min_price = max_price = 0.0
+        except Exception:
+            grouped = pd.Series(dtype=float)
+            min_price = max_price = 0.0
+
+        for row, day in enumerate(days):
+            cells.append(html.Div(day, className='heatmap-label'))
+            for hour in hours:
+                value = grouped.get((row, hour)) if not grouped.empty else None
+                if value is None or pd.isna(value):
+                    cells.append(html.Div('', className='heatmap-cell heat-empty', title=f'{day} {hour:02d}:00 · keine Daten'))
+                    continue
+                spread = max(max_price - min_price, 0.001)
+                normalized = 1 - ((float(value) - min_price) / spread)
+                intensity = min(11, max(0, round(normalized * 11)))
+                cells.append(html.Div('', className=f'heatmap-cell heat-{intensity}', title=f'{day} {hour:02d}:00 · Ø {float(value):.3f} €/L'))
+        cells.extend([html.Div('Teuer', className='heatmap-legend-left'), html.Div('', className='heatmap-legend'), html.Div('Günstig', className='heatmap-legend-right')])
+        return cells
+
+    def _build_nearby_station_table(self):
+        rows = []
+        try:
+            latest_df = self.db.get_latest_prices()
+            stations = self.db.get_all_stations()[:7]
+            for station in stations:
+                station_prices = latest_df[latest_df['station_id'] == station.id] if not latest_df.empty else pd.DataFrame()
+                def price_for(fuel):
+                    fuel_rows = station_prices[station_prices['fuel_type'] == fuel] if not station_prices.empty else pd.DataFrame()
+                    return f"{float(fuel_rows.iloc[-1]['price']):.3f}".replace('.', ',') if not fuel_rows.empty else '—'
+                distance = f"{float(getattr(station, 'distance_km', 0) or 0):.1f} km".replace('.', ',') if getattr(station, 'distance_km', None) else '—'
+                rows.append([station.brand or station.name, station.city or '—', distance, price_for('e5'), price_for('e10'), price_for('diesel')])
+        except Exception:
+            rows = []
+        header = html.Tr([html.Th(h) for h in ['Tankstelle', 'Stadt', 'Distanz', 'E5 (€/l)', 'E10 (€/l)', 'Diesel (€/l)']])
+        if not rows:
+            return html.Div('Noch keine Live-Stationsdaten vorhanden. Importiere oder synchronisiere Preise, um diese Tabelle zu füllen.', className='empty-state')
+        body = [html.Tr([html.Td(cell) for cell in row]) for row in rows]
+        return html.Table(className='nearby-table', children=[html.Thead(header), html.Tbody(body)])
 
     def _get_station_options(self, fuel_type=None):
         stations = self.db.get_all_stations()
