@@ -25,6 +25,14 @@ SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.5
 
 Base = declarative_base()
 
+
+def _safe_database_url_for_log(database_url: str) -> str:
+    """Return a database URL with credentials removed for logs."""
+    try:
+        return str(make_url(database_url).render_as_string(hide_password=True))
+    except Exception:
+        return "<invalid database url>"
+
 class Station(Base):
     __tablename__ = 'stations'
 
@@ -88,7 +96,7 @@ class DatabaseManager:
             Base.metadata.create_all(self.engine, checkfirst=True)
             self._migrate_schema()
             self.Session = sessionmaker(bind=self.engine)
-            logger.info(f"Database initialized at {config.DATABASE_URL}")
+            logger.info("Database initialized at %s", _safe_database_url_for_log(config.DATABASE_URL))
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
             raise
