@@ -21,6 +21,19 @@ TankRadar is a production-ready Python application that monitors real-time gasol
 
 ## Setup
 
+### Konfiguration
+
+TankRadar läuft ohne eigene Konfiguration mit SQLite und dem Dashboard unter
+`http://127.0.0.1:8050`. Für Release- und Produktionsumgebungen sollte
+`.env.example` nach `.env` kopiert und dort angepasst werden. Wichtige Optionen:
+
+- `DATABASE_URL`: optionaler Wechsel von SQLite zu PostgreSQL.
+- `TANKRADAR_PLZ`: Standard-PLZ für lokale und geplante Scrapes.
+- `TANKRADAR_SCRAPE_INTERVAL_MINUTES`: Intervall des Hintergrund-Scrapers.
+- `TANKRADAR_DASH_HOST`, `TANKRADAR_DASH_PORT`, `TANKRADAR_DASH_DEBUG`:
+  Dashboard-Bind-Adresse, Port und Debug-Modus.
+- `GITHUB_CSV_URL`: Cloud-CSV-Quelle für Forks oder eigene Deployments.
+
 ### Windows (automatisch)
 
 1. `install_tankradar.bat` doppelt anklicken. Das Skript installiert bei Bedarf Python, erstellt eine virtuelle Umgebung und installiert alle benoetigten Python-Pakete. Auf 32-Bit-Windows nutzt es automatisch ein kompatibles Python-3.11-/x86-Profil ohne Prophet; die Preisprognose verwendet dort einen einfachen Fallback statt des Prophet-Modells.
@@ -32,6 +45,15 @@ TankRadar is a production-ready Python application that monitors real-time gasol
    ```bash
    pip install -r requirements.txt
    ```
+
+2. **Quality Gates vor einem Release**:
+   ```bash
+   python -m compileall -q .
+   pytest -q
+   python -m pyright
+   ```
+
+Weitere Schritte stehen in `RELEASE_CHECKLIST.md`.
 
 ## Preisänderungs-Prüffälle
 

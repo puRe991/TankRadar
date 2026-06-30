@@ -1,25 +1,22 @@
 import dash
-from dash import Dash, html, dcc, dash_table, Input, Output, State, callback_context, ALL
-print("Importing Plotly...")
-import plotly.graph_objects as go
-print("Importing Pandas...")
 import pandas as pd
-print("Importing local modules...")
-from database import DatabaseManager
-from adac_scraper import ADACScraper
+import plotly.graph_objects as go
+from dash import ALL, Dash, Input, Output, State, callback_context, dash_table, dcc, html
+
 from analysis_engine import AnalysisEngine
-from prediction_model import FuelPredictionModel
-from model_evaluation import FuelModelEvaluator
 from autostart_manager import AutostartManager
-from compliance_report import FUEL_LABELS, build_complaint_pdf, format_address
 from cloud_sync import parse_cloud_price_csv
+from compliance_report import FUEL_LABELS, build_complaint_pdf, format_address
 import config
+from adac_scraper import ADACScraper
+from database import DatabaseManager
+from model_evaluation import FuelModelEvaluator
+from prediction_model import FuelPredictionModel
 from datetime import datetime
 import time
 import uuid
 import re
 import json
-print("Imports complete.")
 
 def format_fuel_price(price_val):
     if price_val is None or price_val == float('inf'):
@@ -1725,9 +1722,9 @@ class TankRadarDashboard:
             'marginBottom': '10px'
         })
 
-    def run(self, debug=False, port=8050):
-        self.app.run(debug=debug, port=port)
+    def run(self, debug=False, host="127.0.0.1", port=8050):
+        self.app.run(debug=debug, host=host, port=port)
 
 if __name__ == "__main__":
     db = TankRadarDashboard()
-    db.run(debug=True)
+    db.run(debug=getattr(config, "DASH_DEBUG", False), host=getattr(config, "DASH_HOST", "127.0.0.1"), port=getattr(config, "DASH_PORT", 8050))
