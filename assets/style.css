@@ -662,3 +662,26 @@ body { background: #06111d; }
 @media (max-width: 1200px) { .dashboard-grid, .hero-metrics { grid-template-columns: 1fr; } .live-card, .heatmap-panel { grid-column: auto; } .stations-panel { grid-row:auto; } .sidebar { position:fixed; transform:translateX(-100%); } .main-content { padding:14px; } }
 .heat-empty { background: rgba(255,255,255,.035); }
 .empty-state { color:#9fb1c7; padding:18px; border:1px dashed rgba(132,164,204,.22); border-radius:8px; line-height:1.5; }
+
+/* Reference dashboard refinements */
+.forecast-panel { grid-column: span 1; }
+.overview-compliance-panel, .project-panel { margin-top: 10px; }
+.kpi-card { display:flex; align-items:center; gap:16px; min-height:118px; }
+.kpi-card small { color:#a8b8cc; display:block; margin-top:4px; }
+.kpi-icon { width:56px; height:56px; border-radius:50%; display:grid; place-items:center; font-size:1.55rem; font-weight:800; flex:0 0 auto; }
+.kpi-icon.green { background:rgba(66,228,134,.28); color:#69eca0; }
+.kpi-icon.purple { background:rgba(162,90,255,.28); color:#c587ff; }
+.kpi-icon.blue { background:rgba(69,163,255,.28); color:#5eb1ff; }
+.kpi-icon.yellow { background:rgba(255,211,61,.25); color:#ffd33d; }
+.purple-text { color:#b56cff !important; }
+.blue-text { color:#45a3ff !important; }
+.yellow-text { color:#ffd33d !important; }
+.select-pill { padding:7px 10px; border-radius:7px; color:#dce9f7; background:rgba(255,255,255,.05); border:1px solid rgba(132,164,204,.18); font-size:.78rem; }
+.ok-mark { width:34px; height:34px; border-radius:50%; display:grid; place-items:center; border:2px solid #42e486; color:#42e486; font-weight:900; }
+.collector-panel p { margin:.35rem 0; color:#a9bad0; }
+.collector-panel p:first-of-type { color:#42e486; font-weight:800; }
+.project-files { display:grid; grid-template-columns: repeat(7, minmax(120px, 1fr)); gap:12px; }
+.project-file { padding:10px 14px; border-radius:7px; border:1px solid rgba(132,164,204,.16); color:#dce9f7; background:rgba(255,255,255,.025); font-size:.83rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.compliance-mini-table td:nth-child(7) { color:#ff5c54; font-weight:800; }
+@media (max-width: 1500px) { .hero-metrics { grid-template-columns: repeat(2, minmax(180px, 1fr)); } .dashboard-grid { grid-template-columns: 1fr 1fr; } .stations-panel { grid-column: span 2; } .project-files { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 900px) { .hero-metrics, .dashboard-grid { grid-template-columns: 1fr; } .live-card, .forecast-panel, .stations-panel { grid-column: auto; } .project-files { grid-template-columns: 1fr; } }
