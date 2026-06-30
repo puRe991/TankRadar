@@ -19,7 +19,7 @@ def detect_price_change_cases(price_rows, stations, cutoff_hour=12, days=30, now
         return empty
 
     now = pd.Timestamp(now or pd.Timestamp.now())
-    start = now - pd.Timedelta(days=days)
+    start = now - pd.Timedelta(days, unit="D")
     prices = pd.DataFrame(price_rows)
     prices["timestamp"] = pd.to_datetime(prices["timestamp"])
     prices = prices.sort_values(["station_id", "fuel_type", "timestamp", "id"])
