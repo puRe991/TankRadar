@@ -298,8 +298,9 @@ class TankRadarDashboard:
                 dcc.Store(id='edit-station-id-store'),
                 dcc.Store(id='last-scrape-ts', data=None),
                 
-                # Internal management components
-                dcc.Interval(id='interval-component', interval=30*1000, n_intervals=0),
+                # Slow housekeeping refresh only. Heavy graphs refresh from explicit data-change
+                # signals below so Dash does not stay in "Updating" during expensive forecasts.
+                dcc.Interval(id='interval-component', interval=5*60*1000, n_intervals=0),
                 dcc.Interval(id='countdown-interval', interval=1000, n_intervals=0),
                 html.Div(id='bulk-dummy-output', style={'display': 'none'}),
                 html.Div(id='scraper-dummy-output', style={'display': 'none'}),
@@ -817,10 +818,11 @@ class TankRadarDashboard:
             [Input('station-selection-store', 'data'),
              Input('dashboard-station-selector', 'value'),
              Input('fuel-type-selector', 'value'),
-             Input('interval-component', 'n_intervals'),
-             Input('save-price', 'n_clicks')]
+             Input('save-price', 'n_clicks'),
+             Input('last-scrape-ts', 'data'),
+             Input('bulk-dummy-output', 'children')]
         )
-        def update_dashboard(stored_station_id, dropdown_station_id, fuel_type, _, _n2):
+        def update_dashboard(stored_station_id, dropdown_station_id, fuel_type, _save_clicks, _last_scrape_ts, _bulk_result):
             station_id = self._resolve_dashboard_station_id(stored_station_id, dropdown_station_id)
             if not station_id:
                 return self._empty_figure(), self._empty_figure(), [], "", self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
@@ -990,9 +992,11 @@ class TankRadarDashboard:
              Output('city-avg-comparison', 'children')],
             [Input('station-selection-store', 'data'),
              Input('fuel-type-selector', 'value'),
-             Input('interval-component', 'n_intervals')]
+             Input('save-price', 'n_clicks'),
+             Input('last-scrape-ts', 'data'),
+             Input('bulk-dummy-output', 'children')]
         )
-        def update_insights(station_id, fuel_type, _):
+        def update_insights(station_id, fuel_type, _save_clicks, _last_scrape_ts, _bulk_result):
             if not station_id:
                 return {'display': 'none'}, "-", "-", "Stadtdurchschnitt", "-"
             
@@ -1075,9 +1079,12 @@ class TankRadarDashboard:
         @self.app.callback(
             [Output('compliance-table-container', 'children'),
              Output('compliance-kpi-row', 'children')],
-            [Input('current-view-store', 'data'), Input('interval-component', 'n_intervals')]
+            [Input('current-view-store', 'data'),
+             Input('save-price', 'n_clicks'),
+             Input('last-scrape-ts', 'data'),
+             Input('bulk-dummy-output', 'children')]
         )
-        def update_compliance_view(view_state, _):
+        def update_compliance_view(view_state, _save_clicks, _last_scrape_ts, _bulk_result):
             if view_state != 'compliance':
                 return dash.no_update, dash.no_update
             cases = self.db.get_price_change_cases(cutoff_hour=12, days=30)
