@@ -807,8 +807,13 @@ class TankRadarDashboard:
         # Callback to update the dashboard content
         @self.app.callback(
             [Output('price-graph', 'figure'),
+             Output('forecast-graph', 'figure'),
              Output('prediction-summary', 'children'),
-             Output('selected-station-name', 'children')],
+             Output('selected-station-name', 'children'),
+             Output('nearby-stations-table', 'children'),
+             Output('heatmap-grid', 'children'),
+             Output('overview-compliance-table', 'children'),
+             Output('project-structure', 'children')],
             [Input('station-selection-store', 'data'),
              Input('dashboard-station-selector', 'value'),
              Input('fuel-type-selector', 'value'),
@@ -818,7 +823,7 @@ class TankRadarDashboard:
         def update_dashboard(stored_station_id, dropdown_station_id, fuel_type, _, _n2):
             station_id = self._resolve_dashboard_station_id(stored_station_id, dropdown_station_id)
             if not station_id:
-                return go.Figure(), [], ""
+                return self._empty_figure(), self._empty_figure(), [], "", self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
 
             try:
                 stations = self.db.get_all_stations()
@@ -830,11 +835,7 @@ class TankRadarDashboard:
                 if history_df.empty or fuel_type not in history_df['fuel_type'].unique():
                     fig = go.Figure()
                     fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    return fig, [
-                        html.Div(className='metric-item', children=[
-                            html.P("Keine Daten für diese Auswahl.", className='metric-label')
-                        ])
-                    ], s_display_name
+                    return fig, self._empty_figure('Keine Prognosedaten für diese Auswahl'), self._build_overview_metrics(self.db.get_latest_prices(), fuel_type), s_display_name, self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
 
                 fuel_history_df = history_df[history_df['fuel_type'] == fuel_type].sort_values('timestamp')
                 cutoff = pd.Timestamp.now() - pd.Timedelta(days=14)
@@ -877,34 +878,19 @@ class TankRadarDashboard:
                     annotation_position="top left"
                 )
                 
-                metrics = [
-                    html.Div(className='metric-item', children=[
-                        html.Div([format_fuel_price(current_price), html.Small(" €", style={'fontSize': '1rem', 'marginLeft': '4px'})], className='metric-value'),
-                        html.Div("Aktueller Preis", className='metric-label')
-                    ]),
-                    html.Div(className='metric-item', children=[
-                        html.Div([format_fuel_price(avg_price), html.Small(" €", style={'fontSize': '1rem', 'marginLeft': '4px'})], className='metric-value', style={'opacity': '0.7'}),
-                        html.Div(f"Ø Preis ({len(fuel_history_df)} Datenp.)", className='metric-label')
-                    ])
-                ]
-                
                 if prediction:
                     forecast_df = prediction['forecast']
-                    
-                    # Sanity check: Filter out extreme outliers in prediction for the plot
                     forecast_df = forecast_df[forecast_df['yhat'] < 3.0].copy()
-                    
                     if not forecast_df.empty:
                         fig.add_trace(go.Scatter(
                             x=forecast_df['ds'],
                             y=forecast_df['yhat'],
                             mode='lines',
                             name='Vorhersage',
-                            line={'color': '#ff2d95', 'width': 3, 'dash': 'dash'},
+                            line={'color': '#38c8ff', 'width': 3, 'dash': 'dash'},
                             hovertemplate="<b>Datum:</b> %{x}<br><b>Erwartet:</b> %{y:.3f} €<extra></extra>"
                         ))
-                    
-                    if prediction['best_price'] < 3.0:
+                    if prediction.get('best_price') is not None and prediction['best_price'] < 3.0:
                         fig.add_trace(go.Scatter(
                             x=[prediction['best_time']],
                             y=[prediction['best_price']],
@@ -912,51 +898,10 @@ class TankRadarDashboard:
                             name='Beste Zeit',
                             text=[f"{prediction['best_price']:.3f} €"],
                             textposition="top center",
-                            textfont={'color': '#ffffff', 'size': 16, 'family': 'Arial'},
-                            marker={'color': '#00ffaa', 'size': 20, 'symbol': 'star', 'line': {'width': 3, 'color': '#05050a'}},
-                            hovertemplate="<b>Spar-Tipp:</b> Heute %{x|%H:%M}<br><b>Preis:</b> %{y:.3f} €<extra></extra>"
+                            textfont={'color': '#ffffff', 'size': 13, 'family': 'Arial'},
+                            marker={'color': '#42e486', 'size': 16, 'symbol': 'circle', 'line': {'width': 3, 'color': '#05050a'}},
+                            hovertemplate="<b>Spar-Tipp:</b> %{x|%H:%M}<br><b>Preis:</b> %{y:.3f} €<extra></extra>"
                         ))
-                        
-                        best_lower = prediction.get('best_price_lower')
-                        best_upper = prediction.get('best_price_upper')
-                        price_range = f"{best_lower:.3f}–{best_upper:.3f} €/L" if best_lower is not None and best_upper is not None else "Nicht verfügbar"
-                        uncertainty = prediction.get('best_uncertainty')
-                        uncertainty_label = f"Intervallbreite ±{uncertainty / 2:.3f} €/L" if uncertainty is not None else "Unsicherheit nicht verfügbar"
-
-                        metrics.extend([
-                            html.Div(className='metric-item', children=[
-                                html.Div([format_fuel_price(prediction['best_price']), html.Small(" €", style={'fontSize': '1rem', 'marginLeft': '4px'})], className='metric-value', style={'color': '#00ffaa'}),
-                                html.Div(f"Beste Zeit heute {prediction['best_time'].strftime('%H:%M')}", className='metric-label')
-                            ]),
-                            html.Div(className='metric-item', children=[
-                                html.Div(price_range, className='metric-value', style={'color': '#9be7ff', 'fontSize': '1.4rem'}),
-                                html.Div(uncertainty_label, className='metric-label')
-                            ]),
-                            html.Div(className='metric-item', children=[
-                                html.Div(f"{max(0.0, current_price - prediction['best_price']):.3f} €", className='metric-value', style={'color': '#ffd700'}),
-                                html.Div("Mögliche Ersparnis", className='metric-label')
-                            ])
-                        ])
-
-                if evaluation.get('best_model'):
-                    best_model = evaluation['best_model']
-                    hit_rate = best_model.get('cheapest_window_accuracy')
-                    hit_label = f"{hit_rate * 100:.0f}% Trefferquote" if hit_rate is not None else "Trefferquote N/A"
-                    metrics.extend([
-                        html.Div(className='metric-item', children=[
-                            html.Div(f"MAE {best_model['mae']:.3f} / RMSE {best_model['rmse']:.3f}", className='metric-value', style={'color': '#c8ff00', 'fontSize': '1.35rem'}),
-                            html.Div(f"Modellqualität: {best_model['label']} ({evaluation['cutoff_count']} Backtests)", className='metric-label')
-                        ]),
-                        html.Div(className='metric-item', children=[
-                            html.Div(hit_label, className='metric-value', style={'color': '#c8ff00', 'fontSize': '1.35rem'}),
-                            html.Div("Günstigster Zeitraum korrekt erkannt", className='metric-label')
-                        ])
-                    ])
-                elif evaluation.get('message'):
-                    metrics.append(html.Div(className='metric-item', children=[
-                        html.Div("N/A", className='metric-value', style={'opacity': '0.7'}),
-                        html.Div(f"Modellqualität: {evaluation['message']}", className='metric-label')
-                    ]))
 
                 # Calculate dynamic Y-axis range based on both history and prediction
                 all_prices = fuel_df['price'].tolist()
@@ -977,11 +922,6 @@ class TankRadarDashboard:
                 else:
                     y_min = 1.0
                     y_max = 2.5
-
-                # DEBUG: Print prediction presence to terminal
-                print(f"DEBUG: Station {station_id} | Fuel {fuel_type} | Prediction Found: {prediction is not None}")
-                if prediction:
-                    print(f"DEBUG: Best price predicted: {prediction['best_price']} at {prediction['best_time']}")
 
                 fig.update_layout(
                     margin=dict(l=65, r=30, t=55, b=50), 
@@ -1027,18 +967,19 @@ class TankRadarDashboard:
                         "mirror": True
                         # automargin entfernt
                     },
-                    height=500,      # Von 450 auf 500 erhöht, da Range Slider Platz braucht
-                    # autosize=True  ← ENTFERNT: kämpft gegen explizite height
+                    height=360
                 )
                 
-                return fig, metrics, s_display_name
+                metrics = self._build_overview_metrics(self.db.get_latest_prices(), fuel_type, current_price, prediction, evaluation)
+                forecast_fig = self._build_forecast_figure(fuel_history_df, prediction, current_price)
+                return fig, forecast_fig, metrics, s_display_name, self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
             except Exception as e:
                 import logging
                 dash_logger = logging.getLogger("TankRadar.Dashboard")
                 dash_logger.error(f"Error in update_dashboard: {e}")
                 import traceback
                 dash_logger.error(traceback.format_exc())
-                return go.Figure(), [html.Div(f"Fehler: {e}", style={'color': 'var(--secondary)'})], "Fehler"
+                return self._empty_figure('Fehler beim Laden'), self._empty_figure('Fehler beim Laden'), [html.Div(f"Fehler: {e}", style={'color': 'var(--secondary)'})], "Fehler", self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
 
         # Insight Engine Callback
         @self.app.callback(
@@ -1171,10 +1112,11 @@ class TankRadarDashboard:
 
         @self.app.callback(
             Output('compliance-pdf-download', 'data'),
-            Input('download-compliance-pdf', 'n_clicks'),
+            [Input('download-compliance-pdf', 'n_clicks'),
+             Input('download-compliance-pdf-overview', 'n_clicks')],
             prevent_initial_call=True
         )
-        def download_compliance_report(n_clicks):
+        def download_compliance_report(n_clicks, overview_n_clicks):
             cases = self.db.get_price_change_cases(cutoff_hour=12, days=30)
             pdf = build_complaint_pdf(cases, cutoff_hour=12)
             filename = f"TankRadar_Beschwerdeanlage_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.pdf"
