@@ -542,6 +542,18 @@ class TankRadarDashboard:
         body = [html.Tr([html.Td(cell) for cell in row]) for row in rows]
         return html.Table(className='nearby-table', children=[html.Thead(header), html.Tbody(body)])
 
+    def _station_ids_with_fuel(self, fuel_type):
+        """Return station IDs that have at least one price for the selected fuel."""
+        if not fuel_type:
+            return set()
+        try:
+            latest_df = self.db.get_latest_prices()
+            if latest_df.empty or 'fuel_type' not in latest_df.columns:
+                return set()
+            return {str(station_id) for station_id in latest_df[latest_df['fuel_type'] == fuel_type]['station_id'].dropna()}
+        except Exception:
+            return set()
+
     def _get_station_options(self, fuel_type=None):
         stations = self.db.get_all_stations()
         if not stations:
@@ -580,7 +592,7 @@ class TankRadarDashboard:
         station_ids = getattr(config, 'STATION_IDS', [])
         return station_ids[0] if station_ids else None
 
-    def _resolve_dashboard_station_id(self, stored_station_id, dropdown_station_id):
+    def _resolve_dashboard_station_id(self, stored_station_id, dropdown_station_id, fuel_type=None):
         """Return the station that should drive dashboard widgets.
 
         The dashboard historically depended only on ``station-selection-store``.
@@ -598,9 +610,14 @@ class TankRadarDashboard:
         )
 
         valid_station_ids = {str(option['value']) for option in self._get_station_options()}
+        stations_with_fuel = self._station_ids_with_fuel(fuel_type)
         for station_id in candidates:
-            if station_id is not None and str(station_id) in valid_station_ids:
-                return str(station_id)
+            station_key = str(station_id) if station_id is not None else None
+            if station_key in valid_station_ids and (not stations_with_fuel or station_key in stations_with_fuel):
+                return station_key
+        for station_id in stations_with_fuel:
+            if station_id in valid_station_ids:
+                return station_id
         return None
 
     def _get_station_grid_content(self, fuel_type, selected_id=None):
@@ -707,6 +724,31 @@ class TankRadarDashboard:
         # Sort cards: Favorites first
         cards.sort(key=lambda x: "favorite" in x.className, reverse=True)
         return cards
+
+
+    def _empty_figure(self, message="Keine Daten verfügbar"):
+        """Build a dark, responsive placeholder figure instead of leaving Plotly's default axes."""
+        fig = go.Figure()
+        fig.add_annotation(
+            text=message,
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            font={"size": 16, "color": "#c9d7e6"},
+            align="center",
+        )
+        fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=40, r=30, t=40, b=40),
+            height=360,
+            xaxis={"visible": False},
+            yaxis={"visible": False},
+        )
+        return fig
 
     def _build_overview_metrics(self, latest_df, fuel_type, current_price=None, prediction=None, evaluation=None):
         """Build the four reference-style KPI cards with defensive fallbacks."""
@@ -818,9 +860,12 @@ class TankRadarDashboard:
         def sync_station_selector(_interval, selected_id, fuel_type, _save, _sync, _scrape_ts):
             options = self._get_station_options(fuel_type)
             option_values = {str(option['value']): option['value'] for option in options}
-            if selected_id is not None and str(selected_id) in option_values:
+            stations_with_fuel = self._station_ids_with_fuel(fuel_type)
+            if selected_id is not None and str(selected_id) in option_values and (not stations_with_fuel or str(selected_id) in stations_with_fuel):
                 return options, option_values[str(selected_id)]
-            fallback = next(iter(option_values.values()), None)
+            fallback = next((option['value'] for option in options if str(option['value']) in stations_with_fuel), None)
+            if fallback is None:
+                fallback = next(iter(option_values.values()), None)
             return options, fallback
 
         # Callback to handle station selection from the top dropdown.
@@ -937,7 +982,7 @@ class TankRadarDashboard:
              Input('bulk-dummy-output', 'children')]
         )
         def update_dashboard(stored_station_id, dropdown_station_id, fuel_type, _save_clicks, _last_scrape_ts, _bulk_result):
-            station_id = self._resolve_dashboard_station_id(stored_station_id, dropdown_station_id)
+            station_id = self._resolve_dashboard_station_id(stored_station_id, dropdown_station_id, fuel_type)
             if not station_id:
                 return self._empty_figure(), self._empty_figure(), [], "", self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
 
@@ -949,9 +994,9 @@ class TankRadarDashboard:
                 history_df = self.db.get_historical_data(station_id, days=90)
                 
                 if history_df.empty or fuel_type not in history_df['fuel_type'].unique():
-                    fig = go.Figure()
-                    fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    return fig, self._empty_figure('Keine Prognosedaten für diese Auswahl'), self._build_overview_metrics(self.db.get_latest_prices(), fuel_type), s_display_name, self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
+                    fuel_label = FUEL_LABELS.get(fuel_type, fuel_type.upper() if fuel_type else "Kraftstoff")
+                    message = f"Keine Preisdaten für {fuel_label} an dieser Tankstelle"
+                    return self._empty_figure(message), self._empty_figure('Keine Prognosedaten für diese Auswahl'), self._build_overview_metrics(self.db.get_latest_prices(), fuel_type), s_display_name, self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
 
                 fuel_history_df = history_df[history_df['fuel_type'] == fuel_type].sort_values('timestamp')
                 cutoff = pd.Timestamp.now() - pd.Timedelta(days=14)
