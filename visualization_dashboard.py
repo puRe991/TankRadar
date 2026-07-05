@@ -59,15 +59,15 @@ class TankRadarDashboard:
                     html.Div(className='brand-mark', children='◉'),
                     html.Div(children=[
                         html.H1("TankRadar"),
-                        html.P("German Fuel Price Tracker & Predictor", className='brand-subtitle')
+                        html.P("Live-Preise · Prognosen · Prüffälle", className='brand-subtitle')
                     ])
                 ]),
                 
                 html.Div(className='sidebar-actions admin-panel', children=[
                     html.P("Aktionen", className='input-label'),
-                    html.Button("Bulk-Import", id='open-bulk-import', className='btn-primary', style={'width': '100%', 'marginBottom': '10px'}),
-                    html.Button("Station +", id='open-add-station', className='btn-secondary', style={'width': '100%', 'marginBottom': '10px'}),
-                    html.Button("Preis +", id='open-update-price', className='btn-secondary', style={'width': '100%'}),
+                    html.Button("Daten importieren", id='open-bulk-import', className='btn-primary', style={'width': '100%', 'marginBottom': '10px'}),
+                    html.Button("Tankstelle hinzufügen", id='open-add-station', className='btn-secondary', style={'width': '100%', 'marginBottom': '10px'}),
+                    html.Button("Preis erfassen", id='open-update-price', className='btn-secondary', style={'width': '100%'}),
                     html.Hr(style={'borderColor': 'rgba(255,255,255,0.1)', 'margin': '12px 0'}),
                     html.P("ADAC Scraper", className='input-label'),
                     dcc.Input(id='scraper-plz-input', type='text', placeholder='PLZ (z.B. 35444)', value=getattr(config, 'DEFAULT_SCRAPE_LOCATION', '35037'), style={'width': '100%', 'marginBottom': '8px', 'padding': '8px', 'borderRadius': '8px', 'border': '1px solid rgba(255,255,255,0.2)', 'background': 'rgba(255,255,255,0.05)', 'color': 'white'}),
@@ -77,8 +77,8 @@ class TankRadarDashboard:
                 ]),
 
                 html.Div(className='sidebar-navigation nav-pro', style={'marginTop': '20px'}, children=[
-                    html.Button([html.Span("▦", className='nav-icon'), "Overview"], id='btn-nav-radar', className='btn-primary nav-item', style={'width': '100%', 'marginBottom': '10px'}),
-                    html.Button([html.Span("⌁", className='nav-icon'), "Live Prices"], id='btn-nav-logbook', className='btn-secondary nav-item', style={'width': '100%', 'marginBottom': '10px'}),
+                    html.Button([html.Span("▦", className='nav-icon'), "Dashboard"], id='btn-nav-radar', className='btn-primary nav-item', style={'width': '100%', 'marginBottom': '10px'}),
+                    html.Button([html.Span("⌁", className='nav-icon'), "Tank-Tagebuch"], id='btn-nav-logbook', className='btn-secondary nav-item', style={'width': '100%', 'marginBottom': '10px'}),
                     html.Button([html.Span("▥", className='nav-icon'), "Preis-Prüffälle"], id='btn-nav-compliance', className='btn-secondary nav-item', style={'width': '100%'})
                 ]),
 
@@ -103,6 +103,17 @@ class TankRadarDashboard:
             # Main Content
             html.Div(className='main-content', children=[
                 # Notification Area for feedback
+                html.Div(className='topbar', children=[
+                    html.Div(children=[
+                        html.P('Kontrollzentrum', className='eyebrow'),
+                        html.H1('TankRadar Dashboard'),
+                        html.P('Klare Live-Preise, robuste Prognosen und nachvollziehbare Prüffälle.', className='topbar-subtitle')
+                    ]),
+                    html.Div(className='topbar-actions', children=[
+                        html.Button('Import', id='top-open-bulk-import', className='btn-secondary mini-btn'),
+                        html.Button('Preis erfassen', id='top-open-update-price', className='btn-primary mini-btn')
+                    ])
+                ]),
                 html.Div(id='notification-area', style={'marginBottom': '20px'}),
                 
                 # --- RADAR VIEW ---
@@ -118,7 +129,7 @@ class TankRadarDashboard:
                     html.Div(className='glass-card chart-card live-card', children=[
                         html.Div(className='graph-header', children=[
                             html.Div(children=[
-                                html.H2("Live Fuel Prices ⓘ", style={'margin': '0', 'fontSize': '1.8rem', 'fontWeight': '700'}),
+                                html.H2("Preisverlauf & Prognose ⓘ", style={'margin': '0', 'fontSize': '1.8rem', 'fontWeight': '700'}),
                                 html.Span(id='selected-station-name', style={'color': 'var(--text-dim)', 'fontWeight': '500'})
                             ]),
                             html.Div(className='dashboard-selector-panel', children=[
@@ -196,19 +207,19 @@ class TankRadarDashboard:
                         ])
                     ]),
                     html.Div(className='glass-card forecast-panel', children=[
-                        html.Div(className='panel-head', children=[html.H2('Optimal Refueling Forecast ⓘ'), html.Span('24 Stunden⌄', className='select-pill')]),
+                        html.Div(className='panel-head', children=[html.H2('Tankzeit-Prognose ⓘ'), html.Span('24 Stunden⌄', className='select-pill')]),
                         dcc.Graph(id='forecast-graph', config={'displayModeBar': False, 'responsive': True}, style={'height': '260px'}),
                     ]),
                     html.Div(className='glass-card side-panel stations-panel', children=[
-                        html.Div(className='panel-head', children=[html.H2('📍 Nearby Stations'), html.Button('View all', className='btn-secondary mini-btn')]),
+                        html.Div(className='panel-head', children=[html.H2('📍 Tankstellen im Blick'), html.Button('View all', className='btn-secondary mini-btn')]),
                         html.Div(id='nearby-stations-table', children=self._build_nearby_station_table())
                     ]),
                     html.Div(className='glass-card heatmap-panel', children=[
-                        html.H2('Cheapest Hours by Day'),
+                        html.H2('Günstige Zeitfenster'),
                         html.Div(className='heatmap-grid', children=self._build_heatmap_cells())
                     ]),
                     html.Div(className='glass-card source-panel', children=[
-                        html.H2('Data Sources'),
+                        html.H2('Datenquellen'),
                         html.Div(className='source-item', children=[html.Strong('ADAC'), html.Span('Live Preise')]),
                         html.Div(className='source-item', children=[html.Strong('PLZ 10KM'), html.Span('Geografische Aggregation')]),
                         html.Small('Status basiert auf den zuletzt gespeicherten Live-Daten ●')
@@ -218,8 +229,8 @@ class TankRadarDashboard:
                         html.P('Letztes Training: 08:15'), html.P('Nächste Aktualisierung: 08:30')
                     ]),
                     html.Div(className='glass-card collector-panel', children=[
-                        html.Div(className='panel-head', children=[html.H2('Collector Status ⓘ'), html.Span('✓', className='ok-mark')]),
-                        html.P('Fetch every 15 minutes'), html.P(id='collector-last-fetch', children='Letzter Fetch: 08:42')
+                        html.Div(className='panel-head', children=[html.H2('Datensammler ⓘ'), html.Span('✓', className='ok-mark')]),
+                        html.P('Abruf alle 15 Minuten'), html.P(id='collector-last-fetch', children='Letzter Fetch: 08:42')
                     ]),
                     ]),
 
@@ -232,7 +243,7 @@ class TankRadarDashboard:
                     ]),
 
                     html.Div(className='glass-card project-panel', children=[
-                        html.Div(className='panel-head', children=[html.H2('Project Structure')]),
+                        html.Div(className='panel-head', children=[html.H2('Systemmodule')]),
                         html.Div(id='project-structure', className='project-files')
                     ]),
                     
@@ -396,7 +407,7 @@ class TankRadarDashboard:
 
             html.Div(id='bulk-import-modal', className='modal-overlay', style={'display': 'none'}, children=[
                 html.Div(className='modal-content', children=[
-                    html.H2("Bulk-Import"),
+                    html.H2("Daten importieren"),
                     html.P("Kopiere die Liste aus deiner Tank-App hier hinein:", style={'color': '#8888a0'}),
                     dcc.Textarea(
                         id='bulk-text-input',
@@ -595,7 +606,7 @@ class TankRadarDashboard:
     def _get_station_grid_content(self, fuel_type, selected_id=None):
         stations = self.db.get_all_stations()
         if not stations:
-            return [html.P("Keine Tankstellen vorhanden. Nutze den Bulk-Import!", style={'color': 'var(--text-dim)'})]
+            return [html.P("Keine Tankstellen vorhanden. Nutze „Daten importieren“ oder füge eine Tankstelle hinzu.", style={'color': 'var(--text-dim)'})]
 
         # Get latest price for ALL stations to find the cheapest
         latest_df = self.db.get_latest_prices()
@@ -736,19 +747,19 @@ class TankRadarDashboard:
         return [
             html.Div(className="metric-item kpi-card", children=[
                 html.Div("◆", className="kpi-icon green"),
-                html.Div([html.Div("Lowest Price Now", className="metric-label"), html.Div(f"{lowest:.3f} €".replace(".", ",") if lowest else "—", className="metric-value"), html.Small(f"{fuel_label} · {updated_label}")])
+                html.Div([html.Div("Aktuell günstigster Preis", className="metric-label"), html.Div(f"{lowest:.3f} €".replace(".", ",") if lowest else "—", className="metric-value"), html.Small(f"{fuel_label} · {updated_label}")])
             ]),
             html.Div(className="metric-item kpi-card", children=[
                 html.Div("◷", className="kpi-icon purple"),
-                html.Div([html.Div("Best Refuel Time Today", className="metric-label"), html.Div(best_time, className="metric-value purple-text"), html.Small("Basierend auf Prognose")])
+                html.Div([html.Div("Beste Tankzeit heute", className="metric-label"), html.Div(best_time, className="metric-value purple-text"), html.Small("Basierend auf Prognose")])
             ]),
             html.Div(className="metric-item kpi-card", children=[
                 html.Div("⛽", className="kpi-icon blue"),
-                html.Div([html.Div("Stations Monitored", className="metric-label"), html.Div(f"{station_count:,}".replace(",", "."), className="metric-value blue-text"), html.Small("in Deutschland")])
+                html.Div([html.Div("Überwachte Stationen", className="metric-label"), html.Div(f"{station_count:,}".replace(",", "."), className="metric-value blue-text"), html.Small("in Deutschland")])
             ]),
             html.Div(className="metric-item kpi-card", children=[
                 html.Div("⌁", className="kpi-icon yellow"),
-                html.Div([html.Div("Prediction Confidence", className="metric-label"), html.Div(f"{confidence} %", className="metric-value yellow-text"), html.Small("Nächste 24h Prognose")])
+                html.Div([html.Div("Prognosequalität", className="metric-label"), html.Div(f"{confidence} %", className="metric-value yellow-text"), html.Small("Nächste 24h Prognose")])
             ]),
         ]
 
@@ -1453,18 +1464,20 @@ class TankRadarDashboard:
              Output('price-update-station-selector', 'options'),
              Output('price-update-station-selector', 'value', allow_duplicate=True)],
             [Input('open-bulk-import', 'n_clicks'),
+             Input('top-open-bulk-import', 'n_clicks'),
              Input('close-bulk-import', 'n_clicks'),
              Input('run-bulk-import', 'n_clicks'),
              Input('open-add-station', 'n_clicks'),
              Input('close-add-station', 'n_clicks'),
              Input('save-station', 'n_clicks'),
              Input('open-update-price', 'n_clicks'),
+             Input('top-open-update-price', 'n_clicks'),
              Input('close-update-price', 'n_clicks'),
              Input('save-price', 'n_clicks')],
             [State('station-selection-store', 'data')],
             prevent_initial_call=True
         )
-        def toggle_modals(n1, n2, n3, n4, n5, n6, n7, n8, n9, current_sid):
+        def toggle_modals(n1, n1_top, n2, n3, n4, n5, n6, n7, n7_top, n8, n9, current_sid):
             ctx = callback_context
             if not ctx.triggered:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
@@ -1476,11 +1489,11 @@ class TankRadarDashboard:
             station_opts = dash.no_update
             station_val = dash.no_update
             
-            if button_id == 'open-bulk-import': styles['bulk'] = {'display': 'flex'}
+            if button_id in ('open-bulk-import', 'top-open-bulk-import'): styles['bulk'] = {'display': 'flex'}
             elif button_id == 'open-add-station': 
                 styles['add'] = {'display': 'flex'}
                 edit_reset = None 
-            elif button_id == 'open-update-price': 
+            elif button_id in ('open-update-price', 'top-open-update-price'):
                 styles['price'] = {'display': 'flex'}
                 stations = self.db.get_all_stations()
                 station_opts = [{'label': f"{s.brand or ''} {s.name}", 'value': s.id} for s in stations]

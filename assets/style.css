@@ -982,3 +982,190 @@ textarea,
         overflow-x: auto;
     }
 }
+
+/* 2026 Frontend-Neuaufbau: konsistentes Designsystem, bessere Lesbarkeit und robuste Responsiveness */
+:root {
+    --bg-deep: #06101d;
+    --surface-1: #0b1828;
+    --surface-2: #11243a;
+    --surface-3: #18304d;
+    --accent: #58b7ff;
+    --accent-strong: #2f8cff;
+    --secondary: #a78bfa;
+    --success: #36d982;
+    --warning: #ffd166;
+    --danger: #ff6b6b;
+    --text-main: #f7fbff;
+    --text-dim: #a8bad0;
+    --border-light: rgba(169, 199, 234, 0.16);
+    --border-bright: rgba(169, 199, 234, 0.34);
+    --sidebar-width: 292px;
+    --card-radius: 18px;
+    --focus-ring: 0 0 0 3px rgba(88, 183, 255, 0.22);
+}
+
+body {
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg-deep);
+}
+
+.app-container {
+    background:
+        radial-gradient(circle at 15% 5%, rgba(88, 183, 255, 0.12), transparent 28rem),
+        radial-gradient(circle at 95% 20%, rgba(167, 139, 250, 0.12), transparent 24rem),
+        linear-gradient(180deg, #06101d 0%, #081827 100%);
+}
+
+.sidebar {
+    background: linear-gradient(180deg, rgba(7, 17, 31, 0.98), rgba(5, 13, 24, 0.98));
+    box-shadow: 18px 0 60px rgba(0, 0, 0, 0.24);
+}
+
+.admin-panel {
+    display: block;
+    padding: 14px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--card-radius);
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 22px;
+    padding: 22px 24px;
+    border: 1px solid var(--border-light);
+    border-radius: 22px;
+    background: linear-gradient(135deg, rgba(17, 36, 58, 0.92), rgba(9, 23, 39, 0.94));
+    box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.topbar h1 {
+    margin: 0;
+    font-size: clamp(1.55rem, 2.4vw, 2.35rem);
+    letter-spacing: -0.04em;
+}
+
+.eyebrow {
+    margin: 0 0 6px;
+    color: var(--accent);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.topbar-subtitle {
+    margin: 6px 0 0;
+    color: var(--text-dim);
+}
+
+.topbar-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.btn-primary,
+.btn-secondary {
+    border-radius: 12px;
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+.Select-control:focus-within {
+    outline: none;
+    box-shadow: var(--focus-ring) !important;
+}
+
+.nav-item {
+    border-radius: 12px !important;
+}
+
+.nav-item.btn-primary {
+    color: #04111f;
+    background: linear-gradient(135deg, #7bd0ff 0%, #39a0ff 100%);
+}
+
+.glass-card,
+.metric-item {
+    border-radius: var(--card-radius);
+    background: linear-gradient(145deg, rgba(18, 36, 58, 0.94), rgba(8, 21, 36, 0.98));
+}
+
+.dashboard-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.95fr);
+    grid-template-areas:
+        "live forecast"
+        "live stations"
+        "heatmap stations"
+        "source model"
+        "collector collector";
+}
+
+#price-graph { height: 420px !important; }
+#forecast-graph { height: 290px !important; }
+
+.station-card {
+    min-height: 178px;
+    border-radius: 16px;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
+}
+
+.station-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-bright);
+}
+
+.station-card .price {
+    color: var(--success);
+}
+
+.best-price-badge {
+    border: 0;
+    color: #081522;
+    background: linear-gradient(135deg, #ffde59 0%, #36d982 100%);
+}
+
+.modal-content {
+    max-height: min(88vh, 860px);
+    overflow-y: auto;
+    border-radius: 24px;
+}
+
+@media (max-width: 1500px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+        grid-template-areas: "live" "forecast" "stations" "heatmap" "source" "model" "collector";
+    }
+}
+
+@media (max-width: 900px) {
+    .topbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .topbar-actions {
+        justify-content: stretch;
+    }
+
+    .topbar-actions .btn-primary,
+    .topbar-actions .btn-secondary {
+        flex: 1 1 160px;
+    }
+
+    .hero-metrics {
+        grid-template-columns: 1fr;
+    }
+}
