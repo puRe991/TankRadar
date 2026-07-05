@@ -514,6 +514,32 @@ input:focus, .Select-control:focus {
     min-width: 0;
 }
 
+/*
+ * The station and fuel dropdowns sit inside the price chart card.  The generic
+ * card rule below uses overflow:hidden for rounded card clipping; without this
+ * exception Dash's Select menu is cut off after the first visible rows, which
+ * makes fuel choices such as Super E10/Diesel appear to be missing and prevents
+ * reliable selection.
+ */
+.chart-card.live-card,
+.chart-card.live-card .graph-header,
+.chart-card.live-card .dashboard-selector-panel,
+.chart-card.live-card .dashboard-selector-group {
+    overflow: visible;
+}
+
+.chart-card.live-card {
+    position: relative;
+    z-index: 20;
+}
+
+.chart-card.live-card .Select-menu-outer,
+.chart-card.live-card .css-26l3qy-menu,
+.chart-card.live-card .css-1nmd4o4-menu {
+    width: 100%;
+    min-width: 100%;
+}
+
 .dashboard-selector-panel .dash-dropdown,
 .dashboard-selector-panel .Select-control {
     min-height: 46px;
