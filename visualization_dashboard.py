@@ -13,10 +13,23 @@ from database import DatabaseManager
 from model_evaluation import FuelModelEvaluator
 from prediction_model import FuelPredictionModel
 from datetime import datetime
+from math import asin, cos, radians, sin, sqrt
 import time
 import uuid
 import re
 import json
+
+EARTH_RADIUS_KM = 6371.0
+
+
+def haversine_km(lat1, lon1, lat2, lon2):
+    """Great-circle distance in km between two WGS84 coordinates."""
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    d_lat = lat2 - lat1
+    d_lon = lon2 - lon1
+    a = sin(d_lat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(d_lon / 2) ** 2
+    return 2 * EARTH_RADIUS_KM * asin(sqrt(a))
+
 
 def format_fuel_price(price_val):
     if price_val is None or price_val == float('inf'):
@@ -212,11 +225,11 @@ class TankRadarDashboard:
                     ]),
                     html.Div(className='glass-card side-panel stations-panel', children=[
                         html.Div(className='panel-head', children=[html.H2('📍 Tankstellen im Blick'), html.Button('View all', className='btn-secondary mini-btn')]),
-                        html.Div(id='nearby-stations-table', children=self._build_nearby_station_table())
+                        html.Div(id='nearby-stations-table', children=self._build_nearby_station_table(self._get_default_station_id()))
                     ]),
                     html.Div(className='glass-card heatmap-panel', children=[
                         html.H2('Günstige Zeitfenster'),
-                        html.Div(className='heatmap-grid', children=self._build_heatmap_cells())
+                        html.Div(id='heatmap-grid', className='heatmap-grid', children=self._build_heatmap_cells())
                     ]),
                     html.Div(className='glass-card source-panel', children=[
                         html.H2('Datenquellen'),
@@ -268,8 +281,21 @@ class TankRadarDashboard:
 
                     # Station Discovery/Selection
                     html.Div(style={'marginTop': '40px'}, children=[
-                        html.H2("Deine Tankstellen", style={'fontSize': '1.6rem', 'fontWeight': '700'}),
-                        html.Div(id='station-grid', className='station-grid'),
+                        html.Div(style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'space-between', 'flexWrap': 'wrap', 'gap': '10px'}, children=[
+                            html.H2("Deine Tankstellen", style={'fontSize': '1.6rem', 'fontWeight': '700', 'margin': '0'}),
+                            dcc.Checklist(
+                                id='favorites-only-toggle',
+                                options=[{'label': ' Nur Favoriten ⭐', 'value': 'only_favorites'}],
+                                value=[],
+                                className='dash-checklist'
+                            )
+                        ]),
+                        # NB: className lives on the component _get_station_grid_content() returns,
+                        # not here — with several callbacks writing to this Output via
+                        # allow_duplicate, Dash's response validation mis-parses a bare list of
+                        # cards as multiple output values once there are 2+ stations. Returning a
+                        # single wrapping Div (see _get_station_grid_content) avoids that.
+                        html.Div(id='station-grid'),
                     ])
                 ]),
                 
@@ -326,6 +352,7 @@ class TankRadarDashboard:
                 dcc.Store(id='station-selection-store', data=self._get_default_station_id()),
                 dcc.Store(id='edit-station-id-store'),
                 dcc.Store(id='last-scrape-ts', data=None),
+                dcc.Store(id='refuel-log-refresh', data=0),
                 
                 # Slow housekeeping refresh only. Heavy graphs refresh from explicit data-change
                 # signals below so Dash does not stay in "Updating" during expensive forecasts.
@@ -522,17 +549,31 @@ class TankRadarDashboard:
         cells.extend([html.Div('Teuer', className='heatmap-legend-left'), html.Div('', className='heatmap-legend'), html.Div('Günstig', className='heatmap-legend-right')])
         return cells
 
-    def _build_nearby_station_table(self):
+    def _build_nearby_station_table(self, reference_station_id=None):
         rows = []
         try:
             latest_df = self.db.get_latest_prices()
-            stations = self.db.get_all_stations()[:7]
+            stations = self.db.get_all_stations()
+            reference = next((s for s in stations if str(s.id) == str(reference_station_id)), None) if reference_station_id else None
+            has_reference_coords = bool(reference and reference.latitude is not None and reference.longitude is not None)
+
+            if has_reference_coords:
+                with_coords = [s for s in stations if s.latitude is not None and s.longitude is not None]
+                without_coords = [s for s in stations if s not in with_coords]
+                with_coords.sort(key=lambda s: haversine_km(reference.latitude, reference.longitude, s.latitude, s.longitude))
+                stations = (with_coords + without_coords)[:7]
+            else:
+                stations = stations[:7]
+
             for station in stations:
                 station_prices = latest_df[latest_df['station_id'] == station.id] if not latest_df.empty else pd.DataFrame()
                 def price_for(fuel):
                     fuel_rows = station_prices[station_prices['fuel_type'] == fuel] if not station_prices.empty else pd.DataFrame()
                     return f"{float(fuel_rows.iloc[-1]['price']):.3f}".replace('.', ',') if not fuel_rows.empty else '—'
-                distance = f"{float(getattr(station, 'distance_km', 0) or 0):.1f} km".replace('.', ',') if getattr(station, 'distance_km', None) else '—'
+                distance = '—'
+                if has_reference_coords and station.latitude is not None and station.longitude is not None:
+                    km = haversine_km(reference.latitude, reference.longitude, station.latitude, station.longitude)
+                    distance = f"{km:.1f} km".replace('.', ',')
                 rows.append([station.brand or station.name, station.city or '—', distance, price_for('e5'), price_for('e10'), price_for('diesel')])
         except Exception:
             rows = []
@@ -620,15 +661,23 @@ class TankRadarDashboard:
                 return station_id
         return None
 
-    def _get_station_grid_content(self, fuel_type, selected_id=None):
-        stations = self.db.get_all_stations()
+    def _get_station_grid_content(self, fuel_type, selected_id=None, favorites_only=False):
+        stations = self.db.get_favorite_stations() if favorites_only else self.db.get_all_stations()
         if not stations:
-            return [html.P("Keine Tankstellen vorhanden. Nutze „Daten importieren“ oder füge eine Tankstelle hinzu.", style={'color': 'var(--text-dim)'})]
+            message = "Noch keine Favoriten markiert. Klicke auf ☆ an einer Tankstelle, um sie zu favorisieren." if favorites_only else "Keine Tankstellen vorhanden. Nutze „Daten importieren“ oder füge eine Tankstelle hinzu."
+            return html.Div(html.P(message, style={'color': 'var(--text-dim)'}))
 
         # Get latest price for ALL stations to find the cheapest
         latest_df = self.db.get_latest_prices()
         fuel_latest = latest_df[latest_df['fuel_type'] == fuel_type]
-        
+
+        # Fetch 24h history for all stations in one query for the card sparklines.
+        recent_df = self.db.get_recent_prices(fuel_type, hours=24)
+        recent_by_station = {
+            station_id: group.sort_values('timestamp')['price'].tolist()
+            for station_id, group in recent_df.groupby('station_id')
+        } if not recent_df.empty else {}
+
         import logging
         dash_logger = logging.getLogger("TankRadar.Dashboard")
         
@@ -694,7 +743,16 @@ class TankRadarDashboard:
                 price_div = html.Div([latest_price], className='price')
                 
             card_content.append(price_div)
-            
+
+            # --- 24h Sparkline ---
+            sparkline_fig = self._build_sparkline_figure(recent_by_station.get(s.id, []))
+            if sparkline_fig is not None:
+                card_content.append(dcc.Graph(
+                    figure=sparkline_fig,
+                    config={'staticPlot': True, 'displayModeBar': False},
+                    style={'height': '28px', 'marginBottom': '8px'},
+                ))
+
             # --- Timestamp Display ---
             if timestamp_str:
                 try:
@@ -723,8 +781,30 @@ class TankRadarDashboard:
         
         # Sort cards: Favorites first
         cards.sort(key=lambda x: "favorite" in x.className, reverse=True)
-        return cards
+        # Return a single wrapping Div (not a bare list) so Dash's response validation
+        # doesn't mistake multiple cards for multiple output values — see the comment
+        # on the '#station-grid' placeholder in _setup_layout for why that matters.
+        return html.Div(className='station-grid', children=cards)
 
+    def _build_sparkline_figure(self, prices):
+        """Tiny 24h trend line for a station card. None if there's nothing to draw."""
+        if len(prices) < 2:
+            return None
+        # Plotly renders to SVG and can't resolve CSS custom properties, so these mirror
+        # the --success/--secondary hex values from assets/style.css's default theme.
+        color = '#00ffaa' if prices[-1] < prices[0] else ('#ff2d95' if prices[-1] > prices[0] else 'rgba(255,255,255,0.4)')
+        fig = go.Figure(go.Scatter(y=prices, mode='lines', line={'color': color, 'width': 2}, hoverinfo='skip'))
+        fig.update_layout(
+            template=None,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=0, r=0, t=0, b=0),
+            height=28,
+            showlegend=False,
+            xaxis={'visible': False, 'fixedrange': True},
+            yaxis={'visible': False, 'fixedrange': True},
+        )
+        return fig
 
     def _empty_figure(self, message="Keine Daten verfügbar"):
         """Build a dark, responsive placeholder figure instead of leaving Plotly's default axes."""
@@ -853,10 +933,11 @@ class TankRadarDashboard:
             Output('station-grid', 'children'),
             [Input('interval-component', 'n_intervals'),
              Input('station-selection-store', 'data'),
-             Input('fuel-type-selector', 'value')]
+             Input('fuel-type-selector', 'value'),
+             Input('favorites-only-toggle', 'value')]
         )
-        def render_station_grid(_, selected_id, fuel_type):
-            return self._get_station_grid_content(fuel_type, selected_id)
+        def render_station_grid(_, selected_id, fuel_type, favorites_only_value):
+            return self._get_station_grid_content(fuel_type, selected_id, favorites_only='only_favorites' in (favorites_only_value or []))
 
         # Keep the always-visible station selector in sync with imports, edits and card clicks.
         @self.app.callback(
@@ -920,10 +1001,12 @@ class TankRadarDashboard:
             [Input({'type': 'delete-station', 'index': ALL}, 'n_clicks'),
              Input({'type': 'edit-station', 'index': ALL}, 'n_clicks'),
              Input({'type': 'toggle-favorite', 'index': ALL}, 'n_clicks')],
-            [State('fuel-type-selector', 'value')],
+            [State('fuel-type-selector', 'value'),
+             State('favorites-only-toggle', 'value')],
             prevent_initial_call=True
         )
-        def handle_management(n_delete, n_edit, n_favorite, fuel_type):
+        def handle_management(n_delete, n_edit, n_favorite, fuel_type, favorites_only_value):
+            favorites_only = 'only_favorites' in (favorites_only_value or [])
             ctx = callback_context
             if not ctx.triggered:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
@@ -954,17 +1037,17 @@ class TankRadarDashboard:
                         'fontWeight': '600',
                         'animation': 'fadeIn 0.5s ease-out'
                     })
-                    return notification, self._get_station_grid_content(fuel_type), dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
-            
+                    return notification, self._get_station_grid_content(fuel_type, favorites_only=favorites_only), dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
             elif action_type == 'edit-station' and trigger['value'] > 0:
                 stations = self.db.get_all_stations()
                 station = next((s for s in stations if s.id == station_id), None)
                 if station:
                     return dash.no_update, dash.no_update, {'display': 'flex'}, station_id, station.name, station.brand, station.city
-            
+
             elif action_type == 'toggle-favorite' and trigger['value'] > 0:
                 if self.db.toggle_favorite(station_id):
-                    return dash.no_update, self._get_station_grid_content(fuel_type), dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+                    return dash.no_update, self._get_station_grid_content(fuel_type, favorites_only=favorites_only), dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
@@ -996,7 +1079,7 @@ class TankRadarDashboard:
         def update_dashboard(stored_station_id, dropdown_station_id, fuel_type, _save_clicks, _last_scrape_ts, _bulk_result):
             station_id = self._resolve_dashboard_station_id(stored_station_id, dropdown_station_id, fuel_type)
             if not station_id:
-                return self._empty_figure(), self._empty_figure(), [], "", self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
+                return self._empty_figure(), self._empty_figure(), [], "", self._build_nearby_station_table(station_id), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
 
             try:
                 stations = self.db.get_all_stations()
@@ -1008,7 +1091,7 @@ class TankRadarDashboard:
                 if history_df.empty or fuel_type not in history_df['fuel_type'].unique():
                     fuel_label = FUEL_LABELS.get(fuel_type, fuel_type.upper() if fuel_type else "Kraftstoff")
                     message = f"Keine Preisdaten für {fuel_label} an dieser Tankstelle"
-                    return self._empty_figure(message), self._empty_figure('Keine Prognosedaten für diese Auswahl'), self._build_overview_metrics(self.db.get_latest_prices(), fuel_type), s_display_name, self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
+                    return self._empty_figure(message), self._empty_figure('Keine Prognosedaten für diese Auswahl'), self._build_overview_metrics(self.db.get_latest_prices(), fuel_type), s_display_name, self._build_nearby_station_table(station_id), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
 
                 fuel_history_df = history_df[history_df['fuel_type'] == fuel_type].sort_values('timestamp')
                 cutoff = pd.Timestamp.now() - pd.Timedelta(days=14)
@@ -1145,14 +1228,14 @@ class TankRadarDashboard:
                 
                 metrics = self._build_overview_metrics(self.db.get_latest_prices(), fuel_type, current_price, prediction, evaluation)
                 forecast_fig = self._build_forecast_figure(fuel_history_df, prediction, current_price)
-                return fig, forecast_fig, metrics, s_display_name, self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
+                return fig, forecast_fig, metrics, s_display_name, self._build_nearby_station_table(station_id), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
             except Exception as e:
                 import logging
                 dash_logger = logging.getLogger("TankRadar.Dashboard")
                 dash_logger.error(f"Error in update_dashboard: {e}")
                 import traceback
                 dash_logger.error(traceback.format_exc())
-                return self._empty_figure('Fehler beim Laden'), self._empty_figure('Fehler beim Laden'), [html.Div(f"Fehler: {e}", style={'color': 'var(--secondary)'})], "Fehler", self._build_nearby_station_table(), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
+                return self._empty_figure('Fehler beim Laden'), self._empty_figure('Fehler beim Laden'), [html.Div(f"Fehler: {e}", style={'color': 'var(--secondary)'})], "Fehler", self._build_nearby_station_table(station_id), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
 
         # Insight Engine Callback
         @self.app.callback(
@@ -1388,9 +1471,10 @@ class TankRadarDashboard:
              Output('kpi-avg-price', 'children'),
              Output('refuel-station-selector', 'options')],
             [Input('current-view-store', 'data'),
-             Input('save-refuel', 'n_clicks')]
+             Input('save-refuel', 'n_clicks'),
+             Input('refuel-log-refresh', 'data')]
         )
-        def update_logbook_view(view_state, save_clicks):
+        def update_logbook_view(view_state, save_clicks, _refresh_token):
             stations = self.db.get_all_stations()
             station_options = []
             for s in stations:
@@ -1441,8 +1525,10 @@ class TankRadarDashboard:
             available_cols = [c for c in cols_to_show if c in df_display.columns]
             
             table = dash_table.DataTable(
+                id='logbook-table',
                 data=df_display.to_dict('records'),
                 columns=[{'name': i, 'id': i} for i in available_cols],
+                row_deletable=True,
                 style_table={'overflowX': 'auto', 'minWidth': '100%'},
                 style_header={
                     'backgroundColor': 'rgba(255,255,255,0.05)',
@@ -1469,6 +1555,29 @@ class TankRadarDashboard:
             )
 
             return table, kpi_spent_str, kpi_liters_str, kpi_avg_price_str, station_options
+
+        # Delete a refuel entry via the DataTable's built-in row-delete "x" button.
+        @self.app.callback(
+            [Output('notification-area', 'children', allow_duplicate=True),
+             Output('refuel-log-refresh', 'data')],
+            Input('logbook-table', 'data_previous'),
+            [State('logbook-table', 'data'),
+             State('refuel-log-refresh', 'data')],
+            prevent_initial_call=True
+        )
+        def handle_refuel_delete(previous_rows, current_rows, refresh_token):
+            if not previous_rows:
+                raise dash.exceptions.PreventUpdate
+
+            current_ids = {row.get('id') for row in (current_rows or [])}
+            removed_rows = [row for row in previous_rows if row.get('id') not in current_ids]
+            if not removed_rows:
+                raise dash.exceptions.PreventUpdate
+
+            deleted = sum(1 for row in removed_rows if self.db.delete_refuel_entry(row['id']))
+            msg = f"{deleted} Tankvorgang/-vorgänge gelöscht." if deleted else "Löschen fehlgeschlagen."
+            notification_type = "success" if deleted else "error"
+            return self._create_notification(msg, notification_type), (refresh_token or 0) + 1
 
         # Stale Data Reminder Callback
         @self.app.callback(
@@ -1671,10 +1780,11 @@ class TankRadarDashboard:
              State('update-fuel-type', 'value'),
              State('update-price-value', 'value'),
              State('edit-station-id-store', 'data'),
-             State('price-update-station-selector', 'value')],
+             State('price-update-station-selector', 'value'),
+             State('favorites-only-toggle', 'value')],
             prevent_initial_call=True
         )
-        def handle_persistence(n_save_station, n_save_price, s_name, s_brand, s_city, selected_sid, f_type, price, edit_sid, price_modal_sid):
+        def handle_persistence(n_save_station, n_save_price, s_name, s_brand, s_city, selected_sid, f_type, price, edit_sid, price_modal_sid, favorites_only_value):
             ctx = callback_context
             if not ctx.triggered:
                 return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
@@ -1711,7 +1821,8 @@ class TankRadarDashboard:
             # Clear edit store if we saved a station
             edit_store_reset = None if button_id == 'save-station' else dash.no_update
             
-            return notification, self._get_station_grid_content(f_type), "", "", None, dash.no_update, {'display': 'none'}, edit_store_reset
+            favorites_only = 'only_favorites' in (favorites_only_value or [])
+            return notification, self._get_station_grid_content(f_type, favorites_only=favorites_only), "", "", None, dash.no_update, {'display': 'none'}, edit_store_reset
 
         # Callback for ADAC Scraper
         @self.app.callback(
@@ -1722,23 +1833,24 @@ class TankRadarDashboard:
             Input('trigger-adac-scrape', 'n_clicks'),
             [State('scraper-plz-input', 'value'),
              State('fuel-type-selector', 'value'),
-             State('station-selection-store', 'data')],
+             State('station-selection-store', 'data'),
+             State('favorites-only-toggle', 'value')],
             prevent_initial_call=True
         )
-        def run_adac_scrape(n_clicks, plz, fuel_type, selected_id):
+        def run_adac_scrape(n_clicks, plz, fuel_type, selected_id, favorites_only_value):
             if not n_clicks or not plz:
                 return "", "", dash.no_update, dash.no_update
-            
+
             try:
                 scraper = ADACScraper(self.db)
                 results = scraper.scrape_all_fuel_types(plz=plz.strip())
-                
+
                 total = sum(len(v) for v in results.values())
                 parts = [f"{len(v)}× {k}" for k, v in results.items() if v]
                 detail = ", ".join(parts) if parts else "keine Treffer"
-                
+
                 msg = f"✅ {total} Stationen importiert ({detail})"
-                grid = self._get_station_grid_content(fuel_type, selected_id)
+                grid = self._get_station_grid_content(fuel_type, selected_id, favorites_only='only_favorites' in (favorites_only_value or []))
                 return msg, "", time.time(), grid
             except Exception as e:
                 return f"❌ Fehler: {e}", "", dash.no_update, dash.no_update
@@ -1789,29 +1901,30 @@ class TankRadarDashboard:
              Output('station-grid', 'children', allow_duplicate=True)],
             Input('trigger-cloud-sync', 'n_clicks'),
             [State('fuel-type-selector', 'value'),
-             State('station-selection-store', 'data')],
+             State('station-selection-store', 'data'),
+             State('favorites-only-toggle', 'value')],
             prevent_initial_call=True
         )
-        def run_cloud_sync(n_clicks, fuel_type, selected_id):
+        def run_cloud_sync(n_clicks, fuel_type, selected_id, favorites_only_value):
             if not n_clicks:
                 return dash.no_update, dash.no_update
-            
+
             url = getattr(config, 'GITHUB_CSV_URL', '')
             if not url:
                 return self._create_notification("Cloud-URL nicht konfiguriert! Siehe config.py.", 'warning'), dash.no_update
-            
+
             try:
                 import requests
-                
+
                 response = requests.get(url, timeout=30)
                 response.raise_for_status()
-                
+
                 rows, malformed = parse_cloud_price_csv(response.text)
                 if not rows:
                     return self._create_notification("Cloud Sync: keine verwertbaren Preisdaten in der CSV gefunden.", 'warning'), dash.no_update
 
                 stats = self.db.bulk_import_cloud_prices(rows)
-                grid = self._get_station_grid_content(fuel_type, selected_id)
+                grid = self._get_station_grid_content(fuel_type, selected_id, favorites_only='only_favorites' in (favorites_only_value or []))
                 details = (
                     f"{stats['inserted']} Preise importiert, "
                     f"{stats['stations_upserted']} Tankstellen aktualisiert"

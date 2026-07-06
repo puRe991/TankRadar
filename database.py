@@ -369,6 +369,29 @@ class DatabaseManager:
         finally:
             session.close()
 
+    def get_recent_prices(self, fuel_type, hours=24):
+        """Return station_id/timestamp/price rows for one fuel type in the last N hours.
+
+        Used to draw per-station sparklines on the station grid without issuing one
+        query per station.
+        """
+        import pandas as pd
+        from datetime import timedelta
+
+        start = datetime.now() - timedelta(hours=hours)
+        session = self.Session()
+        try:
+            rows = session.query(FuelPrice.station_id, FuelPrice.timestamp, FuelPrice.price).filter(
+                FuelPrice.fuel_type == fuel_type,
+                FuelPrice.timestamp >= start,
+            ).order_by(FuelPrice.timestamp.asc()).all()
+            return pd.DataFrame(rows, columns=["station_id", "timestamp", "price"])
+        except Exception as e:
+            logger.error(f"Error fetching recent prices for {fuel_type}: {e}")
+            return pd.DataFrame(columns=["station_id", "timestamp", "price"])
+        finally:
+            session.close()
+
     def get_price_change_cases(self, cutoff_hour=12, days=30, now=None):
         """Return changed prices after the cutoff, enriched with station details."""
         from compliance_report import detect_price_change_cases
