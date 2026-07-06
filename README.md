@@ -11,13 +11,18 @@ TankRadar is a production-ready Python application that monitors real-time gasol
 
 ## Project Structure
 
-- `data_collector.py`: Background service fetching prices every 5 minutes
+- `adac_scraper.py`: Scheduled ADAC price scraping used by `main.py`
+- `cloud_scraper.py`: Standalone scraper invoked by the GitHub Actions cloud sync workflow
+- `cloud_sync.py`: Parses the cloud CSV export for the dashboard's "Cloud Sync" import
 - `database.py`: PostgreSQL/SQLite interface for storing historical data
 - `analysis_engine.py`: Data processing and statistical analysis
-- `prediction_model.py`: Time-series forecasting using Meta Prophet
+- `prediction_model.py`: Time-series forecasting using Meta Prophet (with a non-Prophet fallback)
+- `model_evaluation.py`: Backtesting/quality metrics for the prediction models
+- `compliance_report.py`: Price-change-after-cutoff detection and PDF export
 - `visualization_dashboard.py`: Interactive Dash/Plotly dashboard
 - `main.py`: Main entry point
 - `config.py`: Configuration and station settings
+- `data_collector.py`: Legacy Tankerkönig-API collector, superseded by `adac_scraper.py`; not used by `main.py`
 
 ## Setup
 

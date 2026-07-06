@@ -780,9 +780,16 @@ class TankRadarDashboard:
                 best_time = "Berechnung läuft"
 
         confidence = 92
-        if evaluation and evaluation.get("mape") is not None:
+        best_model = evaluation.get("best_model") if evaluation else None
+        if best_model and best_model.get("cheapest_window_accuracy") is not None:
             try:
-                confidence = max(50, min(99, round(100 - float(evaluation["mape"]) * 100)))
+                confidence = max(50, min(99, round(float(best_model["cheapest_window_accuracy"]) * 100)))
+            except Exception:
+                confidence = 92
+        elif best_model and best_model.get("mae") is not None and current_price:
+            try:
+                mape = float(best_model["mae"]) / float(current_price)
+                confidence = max(50, min(99, round(100 - mape * 100)))
             except Exception:
                 confidence = 92
 
@@ -819,20 +826,25 @@ class TankRadarDashboard:
 
     def _build_overview_compliance_table(self):
         try:
-            rows = self.db.get_price_change_cases(limit=5)
+            cases = self.db.get_price_change_cases(cutoff_hour=12, days=30)
         except Exception:
-            rows = []
-        if not rows:
+            cases = pd.DataFrame()
+        if cases is None or cases.empty:
             return html.Div("Keine Prüffälle vorhanden.", className="empty-state")
         header = ["Vorgangsnummer", "Zeitpunkt", "Tankstelle", "Kraftstoffart", "Vorpreis", "Neuer Preis", "Differenz"]
         body = []
-        for row in rows:
-            get = row.get if isinstance(row, dict) else lambda key, default="—": getattr(row, key, default)
-            body.append(html.Tr([html.Td(get(key, "—")) for key in ["case_number", "timestamp", "station_name", "fuel_type", "old_price", "new_price", "difference"]]))
+        for _, row in cases.head(5).iterrows():
+            station_name = f"{row.get('brand') or ''} {row.get('station_name') or ''}".strip() or "—"
+            timestamp = pd.Timestamp(row['timestamp']).strftime('%d.%m.%Y %H:%M') if pd.notna(row.get('timestamp')) else "—"
+            fuel_label = FUEL_LABELS.get(row.get('fuel_type'), str(row.get('fuel_type') or '—').upper())
+            previous_price = f"{row['previous_price']:.3f} €" if pd.notna(row.get('previous_price')) else "—"
+            new_price = f"{row['price']:.3f} €" if pd.notna(row.get('price')) else "—"
+            difference = f"{row['difference']:+.3f} €" if pd.notna(row.get('difference')) else "—"
+            body.append(html.Tr([html.Td(value) for value in [row.get('event_id', '—'), timestamp, station_name, fuel_label, previous_price, new_price, difference]]))
         return html.Table(className="nearby-table compliance-mini-table", children=[html.Thead(html.Tr([html.Th(h) for h in header])), html.Tbody(body)])
 
     def _build_project_structure(self):
-        files = ["data_collector.py", "database.py", "analysis_engine.py", "prediction_model.py", "visualization_dashboard.py", "main.py", "config.py"]
+        files = ["adac_scraper.py", "database.py", "analysis_engine.py", "prediction_model.py", "model_evaluation.py", "visualization_dashboard.py", "main.py", "config.py"]
         return [html.Span(["🐍 ", file_name], className="project-file") for file_name in files]
 
     def _setup_callbacks(self):
@@ -1470,7 +1482,7 @@ class TankRadarDashboard:
         def check_data_freshness(_, _n2, _n3):
             latest_df = self.db.get_latest_prices()
             if latest_df.empty:
-                return None, "btn-secondary"
+                return None, {'display': 'none'}, "btn-secondary"
             
             latest_update = pd.to_datetime(latest_df['timestamp']).max()
             now = datetime.now()
@@ -1836,7 +1848,9 @@ class TankRadarDashboard:
         })
 
     def run(self, debug=False, host="127.0.0.1", port=8050):
-        self.app.run(debug=debug, host=host, port=port)
+        # threaded=True keeps the countdown/interval callbacks responsive while a
+        # blocking ADAC scrape or cloud sync request is in flight for another client.
+        self.app.run(debug=debug, host=host, port=port, threaded=True)
 
 if __name__ == "__main__":
     db = TankRadarDashboard()
