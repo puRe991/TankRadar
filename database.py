@@ -1,5 +1,6 @@
 import logging
 import os
+import threading
 import time
 from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, Index, event
 from sqlalchemy.engine import make_url
@@ -22,6 +23,12 @@ logger = logging.getLogger("TankRadar.Database")
 
 SQLITE_LOCK_RETRY_ATTEMPTS = 3
 SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.5
+
+# main.py creates a DatabaseManager on the main thread (dashboard) and another on a
+# background thread (initial scrape) at startup. Against a brand-new database file,
+# both can race through create_all()'s existence check and both try to CREATE TABLE,
+# so schema setup is serialized process-wide.
+_schema_setup_lock = threading.Lock()
 
 Base = declarative_base()
 
@@ -93,8 +100,9 @@ class DatabaseManager:
             if database_url.get_backend_name() == "sqlite":
                 self._register_sqlite_pragmas()
 
-            Base.metadata.create_all(self.engine, checkfirst=True)
-            self._migrate_schema()
+            with _schema_setup_lock:
+                Base.metadata.create_all(self.engine, checkfirst=True)
+                self._migrate_schema()
             self.Session = sessionmaker(bind=self.engine)
             logger.info("Database initialized at %s", _safe_database_url_for_log(config.DATABASE_URL))
         except Exception as e:
@@ -421,26 +429,15 @@ class DatabaseManager:
             # and take the *last* row of the changed_df to see what it changed from.
             
             latest_full = df.drop_duplicates(subset=['station_id', 'fuel_type'], keep='last').copy()
-            latest_changed = changed_df.drop_duplicates(subset=['station_id', 'fuel_type'], keep='last')
-            
-            # Map the previous_price from latest_changed onto latest_full
+            latest_changed = changed_df.drop_duplicates(subset=['station_id', 'fuel_type'], keep='last')[
+                ['station_id', 'fuel_type', 'previous_price']
+            ]
+
+            # Map the previous_price from latest_changed onto latest_full via a vectorized
+            # merge instead of a per-row Python loop (this dataframe can grow to many
+            # thousands of rows as price history accumulates).
             # (If the price never changed since the first record, previous_price will be NaN)
-            for idx, row in latest_full.iterrows():
-                s_id = row['station_id']
-                f_type = row['fuel_type']
-                
-                # Find the matching row in latest_changed
-                match = latest_changed[(latest_changed['station_id'] == s_id) & (latest_changed['fuel_type'] == f_type)]
-                if not match.empty:
-                    # If the latest full row IS the same as the latest changed row, use its previous_price
-                    # If it's NOT (meaning prices stayed the same for a while), the previous price to the current
-                    # is whatever the last change's *current* price was? Wait.
-                    # No, if the latest full row has price 2.00, and latest_changed has price 2.00 (and prev 1.95),
-                    # we want previous_price=1.95.
-                    latest_full.at[idx, 'previous_price'] = match.iloc[-1]['previous_price']
-                else:
-                    latest_full.at[idx, 'previous_price'] = None
-                    
+            latest_full = latest_full.merge(latest_changed, on=['station_id', 'fuel_type'], how='left')
             return latest_full
         except Exception as e:
             logger.error(f"Error fetching latest prices: {e}")

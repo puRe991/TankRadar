@@ -62,6 +62,11 @@ MIN_DATA_POINTS_FOR_ML = 10
 # Default Station IDs (optional fallback)
 STATION_IDS = []
 
+# Legacy Tankerkoenig API integration (data_collector.py). The active scraping
+# path is ADACScraper via main.py; this key only matters if data_collector.py
+# is run standalone.
+TANKERKOENIG_API_KEY = os.getenv("TANKERKOENIG_API_KEY", "")
+
 # Scraper Settings
 DEFAULT_SCRAPE_LOCATION = os.getenv("TANKRADAR_PLZ", "35444").strip() or "35444"
 SCRAPE_INTERVAL_MINUTES = _get_int_env("TANKRADAR_SCRAPE_INTERVAL_MINUTES", 15, minimum=1, maximum=1440)
