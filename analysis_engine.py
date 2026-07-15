@@ -109,6 +109,47 @@ class AnalysisEngine:
             "price": round(avg_per_hour.min(), 3)
         }
 
+    def get_best_deal_recommendation(self, fuel_type, model, days=90):
+        """Scans every tracked station and returns the one with the lowest
+        AI-predicted price for `fuel_type` within the next 24 hours.
+
+        Runs the forecasting model per station so a station whose price is
+        currently low but rising can be weighed against one that is about to
+        dip, across the whole PLZ/10km radius rather than a single station.
+        """
+        best = None
+        for station in self.db.get_all_stations():
+            df = self.db.get_historical_data(station.id, days=days)
+            if df.empty:
+                continue
+
+            fuel_df = df[df['fuel_type'] == fuel_type]
+            if fuel_df.empty:
+                continue
+
+            prediction = model.predict_next_24h(fuel_df)
+            if not prediction or prediction.get('best_price') is None:
+                continue
+
+            # Guard against degenerate model fits (e.g. Prophet collapsing to its
+            # floor bound on sparse/volatile stations): a genuine dip stays close
+            # to the historically observed range, so reject predictions far below
+            # anything actually seen at this station.
+            observed_min = float(fuel_df['price'].min())
+            if prediction['best_price'] < observed_min - 0.05:
+                continue
+
+            if best is None or prediction['best_price'] < best['best_price']:
+                best = {
+                    'station_id': station.id,
+                    'station_name': f"{station.brand or ''} {station.name}".strip(),
+                    'city': station.city,
+                    'best_time': prediction['best_time'],
+                    'best_price': prediction['best_price'],
+                    'model_name': prediction.get('model_name'),
+                }
+        return best
+
     def get_city_comparison(self, station_id, fuel_type):
         """Compares a station's current price to the city average."""
         all_latest = self.db.get_latest_prices()
