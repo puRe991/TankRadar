@@ -76,6 +76,14 @@ DASH_HOST = os.getenv("TANKRADAR_DASH_HOST", "127.0.0.1").strip() or "127.0.0.1"
 DASH_PORT = _get_int_env("TANKRADAR_DASH_PORT", 8050, minimum=1, maximum=65535)
 DASH_DEBUG = _get_bool_env("TANKRADAR_DASH_DEBUG", False)
 
+# Open TankRadar in a native desktop window (pywebview) instead of the system
+# browser. Disable via env var to fall back to plain browser access, e.g. on
+# systems without a supported webview backend.
+NATIVE_WINDOW = _get_bool_env("TANKRADAR_NATIVE_WINDOW", True)
+WINDOW_TITLE = os.getenv("TANKRADAR_WINDOW_TITLE", "TankRadar").strip() or "TankRadar"
+WINDOW_WIDTH = _get_int_env("TANKRADAR_WINDOW_WIDTH", 1400, minimum=800)
+WINDOW_HEIGHT = _get_int_env("TANKRADAR_WINDOW_HEIGHT", 900, minimum=600)
+
 # Cloud Sync Settings (GitHub)
 # Raw CSV written by .github/workflows/scraper.yml. Override via GITHUB_CSV_URL for forks.
 DEFAULT_GITHUB_CSV_URL = "https://raw.githubusercontent.com/puRe991/TankRadar/main/prices_history.csv"

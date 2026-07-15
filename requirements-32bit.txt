@@ -11,3 +11,4 @@ python-dotenv>=1.0,<2.0
 APScheduler>=3.10,<4.0
 beautifulsoup4>=4.12,<5.0
 pydantic>=1.10,<2.0
+pywebview>=4.4,<6.0
