@@ -650,9 +650,8 @@ class TankRadarDashboard:
 
         options = []
         for station in stations:
-            brand = station.brand or "Freie Tankstelle"
             city = station.city or "Ort unbekannt"
-            label = f"{brand} {station.name} ({city})"
+            label = station.name or f"{station.brand or 'Freie Tankstelle'} ({city})"
             price = latest_prices.get(str(station.id))
             if price:
                 label = f"{label} · {price}"
