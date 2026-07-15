@@ -60,6 +60,7 @@ class TankRadarDashboard:
         self.model = FuelPredictionModel()
         self.evaluator = FuelModelEvaluator(self.model)
         self._evaluation_cache = {}
+        self._recommendation_cache = {}
         self.autostart = AutostartManager()
         self._setup_layout()
         self._setup_callbacks()
@@ -275,6 +276,10 @@ class TankRadarDashboard:
                             html.Div(className='insight-card', children=[
                                 html.Div(id='city-avg-label', className='insight-label', children="Stadtdurchschnitt"),
                                 html.Div(id='city-avg-comparison', className='insight-value', children="-")
+                            ]),
+                            html.Div(className='insight-card', children=[
+                                html.Div("KI-Empfehlung (10km-Umkreis)", className='insight-label'),
+                                html.Div(id='ai-recommendation-value', className='insight-value', children="-")
                             ])
                         ])
                     ]),
@@ -510,6 +515,34 @@ class TankRadarDashboard:
                     ])
                 ])
             ])
+        ])
+
+    def _get_best_deal_recommendation_display(self, fuel_type, last_scrape_ts):
+        """Cross-station AI recommendation: cheapest predicted station + time in the tracked radius.
+
+        Running the forecasting model for every station is comparatively expensive
+        (Prophet fits per station), so the result is cached per fuel type and only
+        recomputed once new scrape data actually arrived.
+        """
+        cache_key = (fuel_type, last_scrape_ts)
+        if cache_key in self._recommendation_cache:
+            recommendation = self._recommendation_cache[cache_key]
+        else:
+            try:
+                recommendation = self.analysis.get_best_deal_recommendation(fuel_type, self.model)
+            except Exception as e:
+                import logging
+                logging.getLogger("TankRadar.Dashboard").error(f"Error computing best deal recommendation: {e}")
+                recommendation = None
+            self._recommendation_cache = {cache_key: recommendation}
+
+        if not recommendation:
+            return "Noch nicht genug Daten"
+
+        time_label = recommendation['best_time'].strftime('%H:%M')
+        return html.Span([
+            f"{recommendation['station_name']} · ",
+            html.B(f"{time_label} Uhr ({recommendation['best_price']:.3f}€)")
         ])
 
     def _build_heatmap_cells(self):
@@ -1243,25 +1276,26 @@ class TankRadarDashboard:
              Output('best-weekday-value', 'children'),
              Output('best-hour-value', 'children'),
              Output('city-avg-label', 'children'),
-             Output('city-avg-comparison', 'children')],
+             Output('city-avg-comparison', 'children'),
+             Output('ai-recommendation-value', 'children')],
             [Input('station-selection-store', 'data'),
              Input('fuel-type-selector', 'value'),
              Input('save-price', 'n_clicks'),
              Input('last-scrape-ts', 'data'),
              Input('bulk-dummy-output', 'children')]
         )
-        def update_insights(station_id, fuel_type, _save_clicks, _last_scrape_ts, _bulk_result):
+        def update_insights(station_id, fuel_type, _save_clicks, last_scrape_ts, _bulk_result):
             if not station_id:
-                return {'display': 'none'}, "-", "-", "Stadtdurchschnitt", "-"
-            
+                return {'display': 'none'}, "-", "-", "Stadtdurchschnitt", "-", "-"
+
             try:
                 weekday_info = self.analysis.get_cheapest_weekday(station_id, fuel_type)
                 hour_info = self.analysis.get_best_time_of_day(station_id, fuel_type)
                 city_info = self.analysis.get_city_comparison(station_id, fuel_type)
-                
+
                 weekday_val = f"{weekday_info['day']} ({weekday_info['price']:.3f}€)" if weekday_info else "N/A"
                 hour_val = f"{hour_info['hour']:02d}:00 Uhr ({hour_info['price']:.3f}€)" if hour_info else "N/A"
-                
+
                 city_label = f"Schnitt in {city_info['city']}" if city_info else "Stadtdurchschnitt"
                 if city_info:
                     diff_color = 'var(--success)' if city_info['is_cheaper'] else 'var(--secondary)'
@@ -1273,14 +1307,16 @@ class TankRadarDashboard:
                     ])
                 else:
                     city_val = "N/A"
-                    
+
+                recommendation_val = self._get_best_deal_recommendation_display(fuel_type, last_scrape_ts)
+
                 visible = {'display': 'block', 'marginTop': '20px'}
-                return visible, weekday_val, hour_val, city_label, city_val
+                return visible, weekday_val, hour_val, city_label, city_val, recommendation_val
             except Exception as e:
                 import logging
                 logger = logging.getLogger("TankRadar.Dashboard")
                 logger.error(f"Error in update_insights: {e}")
-                return {'display': 'none'}, "-", "-", "Stadtdurchschnitt", "-"
+                return {'display': 'none'}, "-", "-", "Stadtdurchschnitt", "-", "-"
 
         # Price Calculator Callback
         @self.app.callback(
