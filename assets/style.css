@@ -873,8 +873,7 @@ textarea,
     background: rgba(5, 13, 24, 0.78);
 }
 
-.dash-dropdown,
-.dash-dropdown * {
+.dash-dropdown {
     max-width: 100%;
 }
 

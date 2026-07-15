@@ -3,6 +3,14 @@ import pandas as pd
 from visualization_dashboard import TankRadarDashboard
 
 
+class FakeStation:
+    def __init__(self, id, name, brand, city):
+        self.id = id
+        self.name = name
+        self.brand = brand
+        self.city = city
+
+
 class FakeDatabase:
     def get_latest_prices(self):
         return pd.DataFrame(
@@ -12,6 +20,9 @@ class FakeDatabase:
             ]
         )
 
+    def get_all_stations(self):
+        return [FakeStation("1", "Roth- Energie Gießen", "Roth- Energie", "Gießen")]
+
 
 def test_station_ids_with_fuel_returns_string_ids_for_selected_fuel():
     dashboard = object.__new__(TankRadarDashboard)
@@ -20,6 +31,15 @@ def test_station_ids_with_fuel_returns_string_ids_for_selected_fuel():
     assert dashboard._station_ids_with_fuel("e5") == {"station-e5"}
     assert dashboard._station_ids_with_fuel("diesel") == {"station-diesel"}
     assert dashboard._station_ids_with_fuel("e10") == set()
+
+
+def test_station_option_label_does_not_duplicate_brand_and_city():
+    dashboard = object.__new__(TankRadarDashboard)
+    dashboard.db = FakeDatabase()
+
+    options = dashboard._get_station_options()
+
+    assert options == [{"label": "Roth- Energie Gießen", "value": "1"}]
 
 
 def test_empty_figure_hides_default_axes_and_shows_message():
