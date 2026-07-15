@@ -1,3 +1,4 @@
+import html
 import logging
 import os
 import socket
@@ -16,16 +17,83 @@ os.environ["POLARS_SKIP_CPU_CHECK"] = "1"
 logger = logging.getLogger("TankRadar.Main")
 
 
-def _wait_for_server(host: str, port: int, timeout: float = 15.0) -> bool:
-    """Poll the dashboard socket until it accepts connections or the timeout elapses."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            with socket.create_connection((host, port), timeout=0.5):
-                return True
-        except OSError:
-            time.sleep(0.1)
-    return False
+def _splash_html(title: str) -> str:
+    """Standalone HTML for the startup splash window (no server dependency)."""
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    html, body {{
+        margin: 0;
+        height: 100%;
+        background: #05050a;
+        overflow: hidden;
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+    }}
+    .splash {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        gap: 22px;
+        background: radial-gradient(circle at 50% 30%, rgba(0, 242, 255, 0.12), transparent 60%), #05050a;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-sizing: border-box;
+    }}
+    .logo {{
+        font-size: 44px;
+        line-height: 1;
+        filter: drop-shadow(0 0 12px rgba(0, 242, 255, 0.55));
+    }}
+    .title {{
+        color: #f0f0f5;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+    }}
+    .bar-track {{
+        width: 260px;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+    }}
+    .bar-fill {{
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #00f2ff 0%, #00ffaa 100%);
+        transition: width 0.25s ease-out;
+    }}
+    .status {{
+        color: #9494b8;
+        font-size: 12px;
+        letter-spacing: 0.03em;
+        min-height: 14px;
+    }}
+</style>
+</head>
+<body>
+    <div class="splash">
+        <div class="logo">⛽</div>
+        <div class="title">{html.escape(title)}</div>
+        <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
+        <div class="status" id="status">Initialisiere...</div>
+    </div>
+    <script>
+        function trSetProgress(pct, label) {{
+            document.getElementById('bar').style.width = Math.max(0, Math.min(100, pct)) + '%';
+            if (label) {{
+                document.getElementById('status').textContent = label;
+            }}
+        }}
+    </script>
+</body>
+</html>"""
 
 
 def run_scrape_job():
@@ -90,22 +158,62 @@ def main():
     dashboard = TankRadarDashboard()
 
     if native_window:
-        print(f"Starting Dashboard on http://{host}:{port}")
-        server_thread = threading.Thread(
-            target=dashboard.run, kwargs={"debug": debug, "host": host, "port": port}, daemon=True
-        )
-        server_thread.start()
-
-        if not _wait_for_server(host, port):
-            logger.warning("Dashboard-Server antwortet nicht rechtzeitig, oeffne Fenster trotzdem.")
-
-        webview.create_window(
+        splash = webview.create_window(
             config.WINDOW_TITLE,
-            f"http://{host}:{port}",
-            width=config.WINDOW_WIDTH,
-            height=config.WINDOW_HEIGHT,
+            html=_splash_html(config.WINDOW_TITLE),
+            width=420,
+            height=260,
+            frameless=True,
+            easy_drag=True,
+            on_top=True,
+            background_color="#05050a",
         )
-        webview.start()
+
+        def _start_and_wait():
+            print(f"Starting Dashboard on http://{host}:{port}")
+            server_thread = threading.Thread(
+                target=dashboard.run, kwargs={"debug": debug, "host": host, "port": port}, daemon=True
+            )
+            server_thread.start()
+
+            timeout = 15.0
+            deadline = time.time() + timeout
+            connected = False
+            while time.time() < deadline:
+                try:
+                    with socket.create_connection((host, port), timeout=0.5):
+                        connected = True
+                        break
+                except OSError:
+                    elapsed = timeout - (deadline - time.time())
+                    pct = min(95, int(elapsed / timeout * 95))
+                    try:
+                        splash.evaluate_js(f"trSetProgress({pct}, 'Starte Dashboard-Server...')")
+                    except Exception:
+                        pass
+                    time.sleep(0.2)
+
+            if not connected:
+                logger.warning("Dashboard-Server antwortet nicht rechtzeitig, oeffne Fenster trotzdem.")
+
+            try:
+                splash.evaluate_js("trSetProgress(100, 'Fertig!')")
+            except Exception:
+                pass
+            time.sleep(0.3)
+
+            webview.create_window(
+                config.WINDOW_TITLE,
+                f"http://{host}:{port}",
+                width=config.WINDOW_WIDTH,
+                height=config.WINDOW_HEIGHT,
+            )
+            try:
+                splash.destroy()
+            except Exception:
+                pass
+
+        webview.start(_start_and_wait)
     else:
         # Start the Dashboard (blocking)
         print(f"Starting Dashboard on http://{host}:{port}")
