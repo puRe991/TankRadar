@@ -1,6 +1,8 @@
 import logging
 import os
+import socket
 import threading
+import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -12,6 +14,18 @@ from visualization_dashboard import TankRadarDashboard
 os.environ["POLARS_SKIP_CPU_CHECK"] = "1"
 
 logger = logging.getLogger("TankRadar.Main")
+
+
+def _wait_for_server(host: str, port: int, timeout: float = 15.0) -> bool:
+    """Poll the dashboard socket until it accepts connections or the timeout elapses."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return True
+        except OSError:
+            time.sleep(0.1)
+    return False
 
 
 def run_scrape_job():
@@ -32,6 +46,21 @@ def main():
     debug = bool(getattr(config, "DASH_DEBUG", False))
     host = getattr(config, "DASH_HOST", "127.0.0.1")
     port = getattr(config, "DASH_PORT", 8050)
+
+    native_window = bool(getattr(config, "NATIVE_WINDOW", True))
+    if native_window:
+        try:
+            import webview
+        except ImportError:
+            logger.warning("pywebview nicht installiert, oeffne im Browser stattdessen.")
+            native_window = False
+
+    # The Werkzeug reloader (debug mode) needs the main thread and re-execs the
+    # process, so it is incompatible with running the server in a background
+    # thread for the native window. Force it off in that case.
+    if native_window and debug:
+        logger.warning("TANKRADAR_DASH_DEBUG wird im Fenstermodus ignoriert (Reloader braucht den Hauptthread).")
+        debug = False
 
     # If using Dash debug mode with reloader, background tasks should only start
     # in the child process to avoid duplicate jobs and threading conflicts.
@@ -58,10 +87,29 @@ def main():
     else:
         print("[INFO] Main process waiting for reloader child...")
 
-    # Start the Dashboard (blocking)
-    print(f"Starting Dashboard on http://{host}:{port}")
     dashboard = TankRadarDashboard()
-    dashboard.run(debug=debug, host=host, port=port)
+
+    if native_window:
+        print(f"Starting Dashboard on http://{host}:{port}")
+        server_thread = threading.Thread(
+            target=dashboard.run, kwargs={"debug": debug, "host": host, "port": port}, daemon=True
+        )
+        server_thread.start()
+
+        if not _wait_for_server(host, port):
+            logger.warning("Dashboard-Server antwortet nicht rechtzeitig, oeffne Fenster trotzdem.")
+
+        webview.create_window(
+            config.WINDOW_TITLE,
+            f"http://{host}:{port}",
+            width=config.WINDOW_WIDTH,
+            height=config.WINDOW_HEIGHT,
+        )
+        webview.start()
+    else:
+        # Start the Dashboard (blocking)
+        print(f"Starting Dashboard on http://{host}:{port}")
+        dashboard.run(debug=debug, host=host, port=port)
 
 
 if __name__ == "__main__":

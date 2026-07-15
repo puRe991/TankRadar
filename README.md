@@ -28,15 +28,23 @@ TankRadar is a production-ready Python application that monitors real-time gasol
 
 ### Konfiguration
 
-TankRadar läuft ohne eigene Konfiguration mit SQLite und dem Dashboard unter
-`http://127.0.0.1:8050`. Für Release- und Produktionsumgebungen sollte
-`.env.example` nach `.env` kopiert und dort angepasst werden. Wichtige Optionen:
+TankRadar läuft ohne eigene Konfiguration mit SQLite und öffnet das Dashboard
+standardmäßig in einem eigenen Anwendungsfenster (via `pywebview`), nicht im
+Browser; die Oberfläche wird dabei intern weiterhin unter
+`http://127.0.0.1:8050` bereitgestellt. Für Release- und Produktionsumgebungen
+sollte `.env.example` nach `.env` kopiert und dort angepasst werden. Wichtige
+Optionen:
 
 - `DATABASE_URL`: optionaler Wechsel von SQLite zu PostgreSQL.
 - `TANKRADAR_PLZ`: Standard-PLZ für lokale und geplante Scrapes.
 - `TANKRADAR_SCRAPE_INTERVAL_MINUTES`: Intervall des Hintergrund-Scrapers.
 - `TANKRADAR_DASH_HOST`, `TANKRADAR_DASH_PORT`, `TANKRADAR_DASH_DEBUG`:
   Dashboard-Bind-Adresse, Port und Debug-Modus.
+- `TANKRADAR_NATIVE_WINDOW`: `false` deaktiviert das native Fenster und öffnet
+  TankRadar stattdessen klassisch im Standardbrowser (z.B. wenn `pywebview`
+  auf dem System nicht lauffähig ist).
+- `TANKRADAR_WINDOW_TITLE`, `TANKRADAR_WINDOW_WIDTH`, `TANKRADAR_WINDOW_HEIGHT`:
+  Titel und Startgröße des Anwendungsfensters.
 - `GITHUB_CSV_URL`: Cloud-CSV-Quelle für Forks oder eigene Deployments.
 
 ### Windows (automatisch)

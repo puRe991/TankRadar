@@ -94,7 +94,7 @@ echo pip wird aktualisiert...
 if errorlevel 1 goto :dependency_error
 
 echo Erforderliche Python-Pakete werden heruntergeladen und installiert...
-".venv\Scripts\python.exe" -m pip install --only-binary=:all: --prefer-binary -r "%REQUIREMENTS_FILE%"
+".venv\Scripts\python.exe" -m pip install --only-binary=:all: --no-binary=proxy_tools --prefer-binary -r "%REQUIREMENTS_FILE%"
 if errorlevel 1 goto :dependency_error
 
 echo.
