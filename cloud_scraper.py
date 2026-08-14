@@ -5,7 +5,7 @@ import os
 import logging
 import time
 import config
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 # --- Logging statt print ---
@@ -150,10 +150,15 @@ def build_row(timestamp: str, item: dict, internal_fuel: str) -> Optional[list]:
     if price is None:
         return None
 
-    station_id   = item.get("id", "")
-    operator     = item.get("operator", "").strip()
-    city         = item.get("city", "").strip()
+    # The BFF returns JSON null for unknown operators/cities, so .get(key, "")
+    # still yields None. Coerce explicitly before touching string methods.
+    station_id   = str(item.get("id") or "").strip()
+    operator     = str(item.get("operator") or "").strip()
+    city         = str(item.get("city") or "").strip()
     station_name = f"{operator} {city}".strip()
+
+    if not station_id:
+        return None
 
     return [timestamp, station_id, station_name, operator, city, internal_fuel, price]
 
@@ -179,7 +184,10 @@ def main() -> None:
             writer.writerow(CSV_COLUMNS)
             log.info("Neue CSV-Datei angelegt: %s", CSV_FILE)
 
-        timestamp = datetime.now().isoformat(timespec="seconds")
+        # The GitHub Action runs in UTC while TankRadar displays and evaluates
+        # German local time. Write an explicit UTC offset so importers can
+        # convert instead of guessing (see cloud_sync._parse_timestamp).
+        timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
         for adac_fuel in FUEL_TYPES:
             internal_fuel = FUEL_TYPE_MAP.get(adac_fuel, "e5")
@@ -193,7 +201,14 @@ def main() -> None:
                 continue
 
             for item in items:
-                row = build_row(timestamp, item, internal_fuel)
+                try:
+                    row = build_row(timestamp, item, internal_fuel)
+                except Exception as exc:
+                    # A single malformed station must not abort the whole run and
+                    # discard the rows of the remaining fuel types.
+                    log.warning("  Zeile übersprungen (%s): %s", type(exc).__name__, exc)
+                    rows_skipped += 1
+                    continue
                 if row is None:
                     rows_skipped += 1
                     continue

@@ -1,8 +1,16 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import config
-from cloud_sync import CloudPriceRow, parse_cloud_price_csv
+from cloud_sync import (
+    NAIVE_TIMESTAMP_TZ_LOCAL,
+    CloudPriceRow,
+    parse_cloud_price_csv,
+)
 from database import DatabaseManager, FuelPrice, Station
+
+
+def _to_local_naive(moment: datetime) -> datetime:
+    return moment.astimezone().replace(tzinfo=None)
 
 
 def test_parse_cloud_price_csv_accepts_bom_header_and_current_format():
@@ -11,7 +19,7 @@ def test_parse_cloud_price_csv_accepts_bom_header_and_current_format():
         "2026-06-06T10:00:00,station-1,Test Station,Brand,City,e10,1.759\n"
     )
 
-    rows, malformed = parse_cloud_price_csv(csv_text)
+    rows, malformed = parse_cloud_price_csv(csv_text, NAIVE_TIMESTAMP_TZ_LOCAL)
 
     assert malformed == 0
     assert rows == [
@@ -25,6 +33,35 @@ def test_parse_cloud_price_csv_accepts_bom_header_and_current_format():
             price=1.759,
         )
     ]
+
+
+def test_parse_cloud_price_csv_converts_utc_offset_to_local_time():
+    """A row carrying "+00:00" must be converted, not stripped of its offset."""
+    csv_text = (
+        "timestamp,station_id,station_name,brand,city,fuel_type,price\n"
+        "2026-06-06T10:00:00+00:00,station-1,Test Station,Brand,City,e10,1.759\n"
+    )
+
+    rows, malformed = parse_cloud_price_csv(csv_text)
+
+    assert malformed == 0
+    assert rows[0].timestamp == _to_local_naive(
+        datetime(2026, 6, 6, 10, 0, tzinfo=timezone.utc)
+    )
+
+
+def test_parse_cloud_price_csv_reads_naive_timestamps_as_utc_by_default():
+    """Historic rows have no offset but were written by a UTC GitHub runner."""
+    csv_text = (
+        "timestamp,station_id,station_name,brand,city,fuel_type,price\n"
+        "2026-06-06T10:00:00,station-1,Test Station,Brand,City,e10,1.759\n"
+    )
+
+    rows, _ = parse_cloud_price_csv(csv_text)
+
+    assert rows[0].timestamp == _to_local_naive(
+        datetime(2026, 6, 6, 10, 0, tzinfo=timezone.utc)
+    )
 
 
 def test_bulk_import_cloud_prices_imports_older_missing_cloud_rows(tmp_path, monkeypatch):
@@ -176,6 +213,33 @@ def test_bulk_import_cloud_prices_defers_flush_until_commit(tmp_path, monkeypatc
     assert stats["inserted"] == 2
     assert stats["stations_upserted"] == 2
     assert flush_count == 1
+
+
+def test_get_price_change_cases_only_loads_the_report_window(tmp_path, monkeypatch):
+    """Old history must not be pulled into memory on every dashboard refresh."""
+    db_path = tmp_path / "tankradar.db"
+    monkeypatch.setattr(config, "DATABASE_URL", f"sqlite:///{db_path}")
+    db = DatabaseManager()
+
+    now = datetime(2026, 6, 6, 15, 0)
+    ancient = now - timedelta(days=200)
+    session = db.Session()
+    try:
+        session.add(Station(id="station-1", name="Station One"))
+        # Two rows far outside the 30-day window, plus a real change inside it.
+        session.add(FuelPrice(station_id="station-1", fuel_type="e10", price=1.50, timestamp=ancient))
+        session.add(FuelPrice(station_id="station-1", fuel_type="e10", price=1.60, timestamp=ancient + timedelta(hours=3)))
+        session.add(FuelPrice(station_id="station-1", fuel_type="e10", price=1.70, timestamp=now - timedelta(days=1, hours=2)))
+        session.add(FuelPrice(station_id="station-1", fuel_type="e10", price=1.80, timestamp=now - timedelta(days=1)))
+        session.commit()
+    finally:
+        session.close()
+
+    cases = db.get_price_change_cases(cutoff_hour=12, days=30, now=now)
+
+    assert len(cases) == 1
+    assert cases.iloc[0]["previous_price"] == 1.70
+    assert cases.iloc[0]["price"] == 1.80
 
 
 def test_database_manager_uses_sqlite_connect_args_and_pragmas(tmp_path, monkeypatch):

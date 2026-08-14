@@ -1954,7 +1954,10 @@ class TankRadarDashboard:
                 response = requests.get(url, timeout=30)
                 response.raise_for_status()
 
-                rows, malformed = parse_cloud_price_csv(response.text)
+                rows, malformed = parse_cloud_price_csv(
+                    response.text,
+                    getattr(config, 'CLOUD_CSV_NAIVE_TIMEZONE', 'utc'),
+                )
                 if not rows:
                     return self._create_notification("Cloud Sync: keine verwertbaren Preisdaten in der CSV gefunden.", 'warning'), dash.no_update
 

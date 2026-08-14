@@ -24,7 +24,9 @@ class RefuelLogSchema(BaseModel):
     station_id: Optional[str] = None
     station_name_fallback: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.now)
-    fuel_type: str = Field(..., pattern="^(e5|e10|diesel)$")
+    # Must stay in sync with FuelPriceSchema: the logbook dialog offers the same
+    # four fuel types, so "Super Plus" (e5p) has to validate here as well.
+    fuel_type: str = Field(..., pattern="^(e5|e10|e5p|diesel)$")
     liters: float = Field(..., gt=0)
     price_per_liter: float = Field(..., gt=0)
     total_cost: float = Field(..., gt=0)

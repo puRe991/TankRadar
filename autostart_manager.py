@@ -2,12 +2,17 @@ import os
 import subprocess
 import logging
 
+import config
+
 logger = logging.getLogger("TankRadar.Autostart")
 
 class AutostartManager:
     def __init__(self):
         self.shortcut_name = "TankRadar.lnk"
-        self.target_path = os.path.abspath("start_tankradar.bat")
+        # Anchor on the installation directory instead of the current working
+        # directory: the shortcut is written once but TankRadar can be started
+        # from anywhere, which previously produced a shortcut to a missing file.
+        self.target_path = str(config.BASE_DIR / "start_tankradar.bat")
         self.startup_folder = self._get_startup_folder()
         self.shortcut_path = (
             os.path.join(self.startup_folder, self.shortcut_name)

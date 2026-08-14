@@ -392,15 +392,30 @@ class DatabaseManager:
         finally:
             session.close()
 
+    # Extra history loaded before the report window so the first price inside the
+    # window still has a predecessor to compare against. Scrapes run every ~15
+    # minutes, so two days is a wide margin even across outages.
+    PRICE_CHANGE_LOOKBACK_BUFFER_DAYS = 2
+
     def get_price_change_cases(self, cutoff_hour=12, days=30, now=None):
         """Return changed prices after the cutoff, enriched with station details."""
+        from datetime import timedelta
+
         from compliance_report import detect_price_change_cases
+
+        # Only load the rows the report can actually use. A full history import is
+        # ~90k rows and this runs on every dashboard refresh.
+        reference = now or datetime.now()
+        window_start = reference - timedelta(days=days + self.PRICE_CHANGE_LOOKBACK_BUFFER_DAYS)
 
         session = self.Session()
         try:
             price_rows = [
                 {column.name: getattr(item, column.name) for column in FuelPrice.__table__.columns}
-                for item in session.query(FuelPrice).order_by(FuelPrice.timestamp.asc()).all()
+                for item in session.query(FuelPrice)
+                .filter(FuelPrice.timestamp >= window_start)
+                .order_by(FuelPrice.timestamp.asc())
+                .all()
             ]
             stations = [
                 {column.name: getattr(item, column.name) for column in Station.__table__.columns}

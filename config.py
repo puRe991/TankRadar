@@ -88,3 +88,10 @@ WINDOW_HEIGHT = _get_int_env("TANKRADAR_WINDOW_HEIGHT", 900, minimum=600)
 # Raw CSV written by .github/workflows/scraper.yml. Override via GITHUB_CSV_URL for forks.
 DEFAULT_GITHUB_CSV_URL = "https://raw.githubusercontent.com/puRe991/TankRadar/main/prices_history.csv"
 GITHUB_CSV_URL = os.getenv("GITHUB_CSV_URL", DEFAULT_GITHUB_CSV_URL)
+
+# The cloud scraper runs on GitHub Actions in UTC. Rows written before it started
+# emitting an explicit "+00:00" offset carry no timezone, so they are read as UTC
+# and converted to local time on import. Set to "local" to import them verbatim.
+CLOUD_CSV_NAIVE_TIMEZONE = (
+    os.getenv("TANKRADAR_CLOUD_CSV_NAIVE_TZ", "utc").strip().lower() or "utc"
+)
