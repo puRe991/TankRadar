@@ -24,6 +24,7 @@ ENV/
 *.db-wal
 logs/
 adac_source.html
+adac_state.json
 tmp_*
 
 # Keep the public seed/history CSV under version control for the cloud workflow.
@@ -33,6 +34,16 @@ tmp_*
 build/
 dist/
 *.egg-info/
+
+# Android (android/)
+.gradle/
+local.properties
+captures/
+.cxx/
+*.apk
+*.aab
+*.jks
+*.keystore
 
 # Editor / OS
 .vscode/

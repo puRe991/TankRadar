@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the configured server address is worth restoring onto a new device. -->
+<full-backup-content>
+    <include domain="sharedpref" path="tankradar_prefs.xml" />
+</full-backup-content>

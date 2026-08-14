@@ -1194,3 +1194,136 @@ textarea:focus-visible,
         grid-template-columns: 1fr;
     }
 }
+
+/* ==========================================================================
+   Mobile / Android pass
+   Loaded last so these rules win over the earlier desktop-first breakpoints.
+   Paired with MOBILE_META_TAGS in visualization_dashboard.py — without the
+   viewport meta tag Android lays the page out at a ~980px desktop width and
+   none of this applies.
+   ========================================================================== */
+
+/* 100vw ignores the vertical scrollbar and produces a horizontally scrolling
+   page on every screen size; the app container should simply fill its parent. */
+.app-container { width: 100%; max-width: 100%; }
+
+html, body { overflow-x: hidden; }
+
+/* The hamburger only exists on narrow screens. */
+.mobile-nav-toggle { display: none; }
+
+@media (max-width: 1200px) {
+    .sidebar-brand {
+        position: relative;
+        padding-right: 60px;
+    }
+
+    .mobile-nav-toggle {
+        display: block;
+        position: absolute;
+        top: 50%;
+        right: 0;
+        transform: translateY(-50%);
+        width: 48px;
+        height: 48px;
+        padding: 0;
+        font-size: 1.35rem;
+        line-height: 1;
+        color: #dce9f7;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(132, 164, 204, 0.28);
+        border-radius: 12px;
+        cursor: pointer;
+    }
+
+    /* Collapsed by default: only the brand row stays visible so the dashboard
+       starts at the top of the screen instead of below a full-height menu. */
+    .sidebar > *:not(.sidebar-brand) { display: none; }
+    .sidebar.mobile-open > * { display: flex; }
+    .sidebar.mobile-open > .sidebar-actions,
+    .sidebar.mobile-open > .sidebar-settings { display: block; }
+
+    .sidebar {
+        padding-bottom: 12px;
+        border-right: none;
+        border-bottom: 1px solid rgba(90, 134, 190, 0.2);
+    }
+
+    /* viewport-fit=cover lets content slide under the status bar / notch. */
+    .main-content {
+        padding-left: max(14px, env(safe-area-inset-left));
+        padding-right: max(14px, env(safe-area-inset-right));
+        padding-bottom: max(24px, env(safe-area-inset-bottom));
+    }
+
+    .sidebar { padding-top: max(18px, env(safe-area-inset-top)); }
+}
+
+@media (max-width: 900px) {
+    /* Comfortable touch targets: Android's minimum recommended size is 48dp. */
+    .btn-primary,
+    .btn-secondary,
+    .nav-item {
+        min-height: 48px;
+    }
+
+    .dash-dropdown .Select-control,
+    input[type="text"],
+    input[type="number"],
+    .calc-input {
+        min-height: 48px;
+        /* Below 16px iOS/Android browsers zoom in when a field gains focus. */
+        font-size: 16px;
+    }
+
+    .station-grid { grid-template-columns: 1fr; }
+
+    .topbar h1 { font-size: 1.5rem; }
+    .topbar-subtitle { font-size: .85rem; }
+
+    /* Wide content must scroll inside its own box, never the page body. */
+    .nearby-table,
+    .compliance-mini-table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    .dash-table-container .dash-spreadsheet-container { overflow-x: auto; }
+
+    .compliance-header,
+    .graph-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .compliance-header .btn-primary { width: 100%; }
+
+    /* Full-screen sheets read better than centred dialogs on a phone. */
+    .modal-overlay { padding: 0; align-items: flex-end; }
+    .modal-content {
+        width: 100%;
+        max-width: 100%;
+        max-height: 92dvh;
+        border-radius: 20px 20px 0 0;
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+    .form-grid { grid-template-columns: 1fr; }
+
+    /* Seven 2-hour columns plus the day label do not fit; let the grid scroll. */
+    .heatmap-panel { overflow-x: auto; }
+    .heatmap-grid { min-width: 420px; }
+
+    .project-files { grid-template-columns: 1fr 1fr; }
+
+    .metric-row { flex-direction: column; }
+}
+
+@media (max-width: 560px) {
+    .kpi-card { gap: 12px; min-height: 96px; }
+    .kpi-icon { width: 46px; height: 46px; font-size: 1.25rem; }
+    .metric-value { font-size: 1.45rem; }
+    .project-files { grid-template-columns: 1fr; }
+    .copyright { display: none; }
+}

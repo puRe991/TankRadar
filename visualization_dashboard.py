@@ -1,4 +1,5 @@
 import dash
+import flask
 import pandas as pd
 import plotly.graph_objects as go
 from dash import ALL, Dash, Input, Output, State, callback_context, dash_table, dcc, html
@@ -20,6 +21,94 @@ import re
 import json
 
 EARTH_RADIUS_KM = 6371.0
+
+# Mobile/PWA presentation. Without an explicit viewport Android's browser lays the
+# page out at a ~980px desktop width and renders TankRadar zoomed out; the
+# remaining tags control the Android status bar color and the standalone display
+# mode used once the app is installed to the home screen.
+MOBILE_META_TAGS = [
+    {"name": "viewport", "content": "width=device-width, initial-scale=1, viewport-fit=cover"},
+    {"name": "theme-color", "content": "#07111f"},
+    {"name": "color-scheme", "content": "dark"},
+    {"name": "mobile-web-app-capable", "content": "yes"},
+    {"name": "apple-mobile-web-app-capable", "content": "yes"},
+    {"name": "apple-mobile-web-app-status-bar-style", "content": "black-translucent"},
+    {"name": "apple-mobile-web-app-title", "content": "TankRadar"},
+    {"name": "application-name", "content": "TankRadar"},
+]
+
+# Served from the server root so the service worker's scope covers the whole app.
+# A worker delivered from /assets/ would only control /assets/* and Chrome would
+# not offer the "Zum Startbildschirm hinzufügen" install prompt.
+PWA_MANIFEST = {
+    "name": "TankRadar – Spritpreise & Prognosen",
+    "short_name": "TankRadar",
+    "description": "Live-Spritpreise, Tankzeit-Prognosen und Preis-Prüffälle für deutsche Tankstellen.",
+    "lang": "de-DE",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#07111f",
+    "theme_color": "#07111f",
+    "icons": [
+        {"src": "/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+        {"src": "/assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+        {"src": "/assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    ],
+}
+
+# Network-first worker. TankRadar's data is live, so a cached price would be
+# actively misleading; the cache only exists so the app shell still opens when
+# the phone briefly loses the connection to the TankRadar server.
+SERVICE_WORKER_JS = """
+const CACHE = 'tankradar-shell-v1';
+const SHELL = '/';
+
+self.addEventListener('install', (event) => {
+    self.skipWaiting();
+    event.waitUntil(caches.open(CACHE).then((cache) => cache.add(SHELL)).catch(() => undefined));
+});
+
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys()
+            .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+            .then(() => self.clients.claim())
+    );
+});
+
+self.addEventListener('fetch', (event) => {
+    const request = event.request;
+    // Dash pushes callback results over POST /_dash-update-component; those must
+    // never be served from a cache, and cross-origin requests stay untouched.
+    if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) {
+        return;
+    }
+
+    event.respondWith(
+        fetch(request)
+            .then((response) => {
+                if (response && response.ok && request.mode === 'navigate') {
+                    const copy = response.clone();
+                    caches.open(CACHE).then((cache) => cache.put(SHELL, copy)).catch(() => undefined);
+                }
+                return response;
+            })
+            .catch(() => caches.match(request.mode === 'navigate' ? SHELL : request))
+    );
+});
+"""
+
+# Registered from the page itself; a failed registration (for example over plain
+# HTTP on a non-localhost address) must not break the dashboard.
+SERVICE_WORKER_REGISTRATION_JS = """
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/service-worker.js').catch(function () {});
+    });
+}
+"""
 
 
 def haversine_km(lat1, lon1, lat2, lon2):
@@ -54,7 +143,10 @@ class TankRadarDashboard:
             suppress_callback_exceptions=True,
             serve_locally=True,
             eager_loading=True,
+            title="TankRadar",
+            meta_tags=MOBILE_META_TAGS,
         )
+        self._setup_pwa()
         self.db = DatabaseManager()
         self.analysis = AnalysisEngine()
         self.model = FuelPredictionModel()
@@ -65,16 +157,68 @@ class TankRadarDashboard:
         self._setup_layout()
         self._setup_callbacks()
 
+    def _setup_pwa(self):
+        """Serve the PWA manifest and service worker so Android can install the app.
+
+        Both files must come from the server root: Chrome scopes a service worker
+        to the directory it was served from, and Dash's ``assets_folder`` is
+        mounted under ``/assets/``.
+        """
+        server = self.app.server
+
+        @server.route("/manifest.webmanifest")
+        def tankradar_manifest():
+            response = flask.jsonify(PWA_MANIFEST)
+            response.headers["Content-Type"] = "application/manifest+json"
+            response.headers["Cache-Control"] = "no-cache"
+            return response
+
+        @server.route("/service-worker.js")
+        def tankradar_service_worker():
+            response = flask.Response(SERVICE_WORKER_JS, mimetype="application/javascript")
+            # Without this the browser can pin an outdated worker for 24 hours.
+            response.headers["Cache-Control"] = "no-cache"
+            response.headers["Service-Worker-Allowed"] = "/"
+            return response
+
+        self.app.index_string = """<!DOCTYPE html>
+<html lang="de">
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        <link rel="manifest" href="/manifest.webmanifest">
+        <link rel="icon" href="/assets/icons/icon-192.png" sizes="192x192" type="image/png">
+        <link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
+        {%favicon%}
+        {%css%}
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+        <script>__SERVICE_WORKER_REGISTRATION__</script>
+    </body>
+</html>""".replace("__SERVICE_WORKER_REGISTRATION__", SERVICE_WORKER_REGISTRATION_JS)
+
     def _setup_layout(self):
         self.app.layout = html.Div(className='app-container', children=[
             # Sidebar
-            html.Div(className='sidebar', children=[
+            html.Div(id='sidebar', className='sidebar', children=[
                 html.Div(className='sidebar-brand brand-pro', children=[
                     html.Div(className='brand-mark', children='◉'),
                     html.Div(children=[
                         html.H1("TankRadar"),
                         html.P("Live-Preise · Prognosen · Prüffälle", className='brand-subtitle')
-                    ])
+                    ]),
+                    # Only rendered on narrow screens (see .mobile-nav-toggle in
+                    # style.css), where the sidebar stacks above the content and
+                    # would otherwise push the dashboard a full screen down.
+                    html.Button('☰', id='mobile-nav-toggle', n_clicks=0,
+                                className='mobile-nav-toggle', title='Menü ein-/ausblenden',
+                                **{'aria-label': 'Menü ein-/ausblenden'})
                 ]),
                 
                 html.Div(className='sidebar-actions admin-panel', children=[
@@ -193,9 +337,13 @@ class TankRadarDashboard:
                             html.Span(id='scrape-last-time', children='Noch kein Scan', style={'opacity': '0.7'}),
                         ]),
                         dcc.Graph(
-                            id='price-graph', 
+                            id='price-graph',
+                            # Without an initial figure Plotly paints a white default
+                            # canvas with -1..4 axes until the first callback lands,
+                            # which on a phone is a full-screen white flash.
+                            figure=self._empty_figure('Lade Preisdaten…'),
                             config={
-                                'displayModeBar': 'hover', 
+                                'displayModeBar': 'hover',
                                 'responsive': True,
                                 'scrollZoom': True
                             },
@@ -222,7 +370,7 @@ class TankRadarDashboard:
                     ]),
                     html.Div(className='glass-card forecast-panel', children=[
                         html.Div(className='panel-head', children=[html.H2('Tankzeit-Prognose ⓘ'), html.Span('24 Stunden⌄', className='select-pill')]),
-                        dcc.Graph(id='forecast-graph', config={'displayModeBar': False, 'responsive': True}, style={'height': '260px'}),
+                        dcc.Graph(id='forecast-graph', figure=self._empty_figure('Lade Prognose…', height=260), config={'displayModeBar': False, 'responsive': True}, style={'height': '260px'}),
                     ]),
                     html.Div(className='glass-card side-panel stations-panel', children=[
                         html.Div(className='panel-head', children=[html.H2('📍 Tankstellen im Blick'), html.Button('View all', className='btn-secondary mini-btn')]),
@@ -838,7 +986,7 @@ class TankRadarDashboard:
         )
         return fig
 
-    def _empty_figure(self, message="Keine Daten verfügbar"):
+    def _empty_figure(self, message="Keine Daten verfügbar", height=360):
         """Build a dark, responsive placeholder figure instead of leaving Plotly's default axes."""
         fig = go.Figure()
         fig.add_annotation(
@@ -856,7 +1004,7 @@ class TankRadarDashboard:
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             margin=dict(l=40, r=30, t=40, b=40),
-            height=360,
+            height=height,
             xaxis={"visible": False},
             yaxis={"visible": False},
         )
@@ -960,6 +1108,28 @@ class TankRadarDashboard:
         return [html.Span(["🐍 ", file_name], className="project-file") for file_name in files]
 
     def _setup_callbacks(self):
+        # Mobile navigation: the sidebar stacks above the dashboard on phones, so
+        # it starts collapsed and is expanded on demand. Picking a view collapses
+        # it again so the content is visible right away.
+        @self.app.callback(
+            Output('sidebar', 'className'),
+            [Input('mobile-nav-toggle', 'n_clicks'),
+             Input('btn-nav-radar', 'n_clicks'),
+             Input('btn-nav-logbook', 'n_clicks'),
+             Input('btn-nav-compliance', 'n_clicks')],
+            State('sidebar', 'className'),
+            prevent_initial_call=True
+        )
+        def toggle_mobile_navigation(_toggle_clicks, _radar, _logbook, _compliance, current_class):
+            ctx = callback_context
+            if not ctx.triggered:
+                return dash.no_update
+
+            is_open = 'mobile-open' in (current_class or '')
+            trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            should_open = not is_open if trigger_id == 'mobile-nav-toggle' else False
+            return 'sidebar mobile-open' if should_open else 'sidebar'
+
         # Callback to render the station grid
         @self.app.callback(
             Output('station-grid', 'children'),
@@ -1111,7 +1281,7 @@ class TankRadarDashboard:
         def update_dashboard(stored_station_id, dropdown_station_id, fuel_type, _save_clicks, _last_scrape_ts, _bulk_result):
             station_id = self._resolve_dashboard_station_id(stored_station_id, dropdown_station_id, fuel_type)
             if not station_id:
-                return self._empty_figure(), self._empty_figure(), [], "", self._build_nearby_station_table(station_id), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
+                return self._empty_figure(), self._empty_figure(height=260), [], "", self._build_nearby_station_table(station_id), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
 
             try:
                 stations = self.db.get_all_stations()
@@ -1123,7 +1293,7 @@ class TankRadarDashboard:
                 if history_df.empty or fuel_type not in history_df['fuel_type'].unique():
                     fuel_label = FUEL_LABELS.get(fuel_type, fuel_type.upper() if fuel_type else "Kraftstoff")
                     message = f"Keine Preisdaten für {fuel_label} an dieser Tankstelle"
-                    return self._empty_figure(message), self._empty_figure('Keine Prognosedaten für diese Auswahl'), self._build_overview_metrics(self.db.get_latest_prices(), fuel_type), s_display_name, self._build_nearby_station_table(station_id), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
+                    return self._empty_figure(message), self._empty_figure('Keine Prognosedaten für diese Auswahl', height=260), self._build_overview_metrics(self.db.get_latest_prices(), fuel_type), s_display_name, self._build_nearby_station_table(station_id), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
 
                 fuel_history_df = history_df[history_df['fuel_type'] == fuel_type].sort_values('timestamp')
                 cutoff = pd.Timestamp.now() - pd.Timedelta(days=14)
@@ -1267,7 +1437,7 @@ class TankRadarDashboard:
                 dash_logger.error(f"Error in update_dashboard: {e}")
                 import traceback
                 dash_logger.error(traceback.format_exc())
-                return self._empty_figure('Fehler beim Laden'), self._empty_figure('Fehler beim Laden'), [html.Div(f"Fehler: {e}", style={'color': 'var(--secondary)'})], "Fehler", self._build_nearby_station_table(station_id), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
+                return self._empty_figure('Fehler beim Laden'), self._empty_figure('Fehler beim Laden', height=260), [html.Div(f"Fehler: {e}", style={'color': 'var(--secondary)'})], "Fehler", self._build_nearby_station_table(station_id), self._build_heatmap_cells(), self._build_overview_compliance_table(), self._build_project_structure()
 
         # Insight Engine Callback
         @self.app.callback(

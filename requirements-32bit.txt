@@ -3,6 +3,9 @@
 pandas>=1.5.3,<2.1
 numpy>=1.23.5,<1.27
 dash>=2.16,<4.0
+# Imported directly by visualization_dashboard.py to serve the PWA manifest
+# and service worker; the range is wide enough to defer to Dash's Flask pin.
+Flask>=2.2,<4.0
 plotly>=5.20,<7.0
 requests>=2.31,<3.0
 SQLAlchemy>=2.0,<3.0

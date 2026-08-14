@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    TankRadar runs as a plain HTTP server on the user's own machine and is reached
+    over the local network, so cleartext has to be permitted: there is no
+    certificate for "192.168.x.y" to validate against.
+
+    The consequence is that anyone on the same network can read the traffic. Only
+    bind TANKRADAR_DASH_HOST to 0.0.0.0 on a network you trust — see the "Android"
+    section of the repository README. If you put TankRadar behind an HTTPS reverse
+    proxy, set cleartextTrafficPermitted to false and use the https:// address in
+    the app's setup screen.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

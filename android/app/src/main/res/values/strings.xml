@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TankRadar</string>
+
+    <string name="action_reload">Neu laden</string>
+    <string name="action_settings">Server-Adresse</string>
+
+    <string name="setup_title">Server-Adresse</string>
+    <string name="setup_headline">TankRadar verbinden</string>
+    <string name="setup_explanation">Diese App zeigt das Dashboard deiner eigenen TankRadar-Installation an. Trage die Adresse des Rechners ein, auf dem TankRadar läuft.</string>
+    <string name="setup_address_hint">Adresse, z.B. 192.168.1.20:8050</string>
+    <string name="setup_address_helper">Ohne Angabe eines Ports wird 8050 verwendet.</string>
+    <string name="setup_save">Speichern und verbinden</string>
+    <string name="setup_invalid_address">Diese Adresse konnte nicht gelesen werden.</string>
+    <string name="setup_server_hint">Damit das Handy den Rechner erreicht, muss TankRadar dort mit TANKRADAR_DASH_HOST=0.0.0.0 gestartet sein und beide Geräte müssen im selben Netzwerk sein.</string>
+
+    <string name="error_title">TankRadar nicht erreichbar</string>
+    <string name="error_hint">Prüfe, ob TankRadar auf dem Rechner läuft und ob Handy und Rechner im selben WLAN sind.</string>
+    <string name="error_address">Adresse: %1$s</string>
+    <string name="error_address_unknown">nicht gesetzt</string>
+    <string name="error_retry">Erneut versuchen</string>
+    <string name="error_change_server">Adresse ändern</string>
+
+    <string name="download_saved">%1$s im Ordner \"Downloads\" gespeichert.</string>
+    <string name="download_failed">%1$s konnte nicht gespeichert werden.</string>
+    <string name="download_failed_generic">Download konnte nicht gestartet werden.</string>
+</resources>
