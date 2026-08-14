@@ -1,14 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- The dashboard is dark-only, so the app chrome is too; a light theme would
-         leave white bars framing a dark page. -->
-    <style name="Theme.TankRadar" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="colorPrimary">@color/tankradar_accent</item>
-        <item name="colorOnPrimary">@color/tankradar_background</item>
-        <item name="colorSecondary">@color/tankradar_success</item>
-        <item name="android:colorBackground">@color/tankradar_background</item>
-        <item name="android:statusBarColor">@color/tankradar_surface</item>
-        <item name="android:navigationBarColor">@color/tankradar_background</item>
-        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+<resources>
+    <!-- Only the launch theme; everything after first frame is Compose. -->
+    <style name="Theme.TankRadar" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/tankradar_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 </resources>

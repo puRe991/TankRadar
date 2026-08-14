@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Mirrors the dashboard palette in assets/style.css so the native chrome and
-     the web content do not read as two different apps. -->
+<!--
+    Only the colours the Android resource system needs: the launch theme's window
+    background and the adaptive-icon background. Everything the UI paints lives in
+    ui/theme/Theme.kt, because Compose reads Kotlin values, not resources.
+-->
 <resources>
     <color name="tankradar_background">#07111F</color>
-    <color name="tankradar_surface">#0D1A2B</color>
-    <color name="tankradar_accent">#45A3FF</color>
-    <color name="tankradar_success">#22E77B</color>
-    <color name="tankradar_text">#F6FBFF</color>
-    <color name="tankradar_text_dim">#91A4BA</color>
 </resources>

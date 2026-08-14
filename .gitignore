@@ -50,3 +50,6 @@ captures/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Android Studio / Gradle scratch inside android/
+android/.kotlin/

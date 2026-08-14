@@ -1,5 +1,2 @@
-# The blob-download bridge is only ever called from injected JavaScript, so R8
-# cannot see the call sites and would otherwise strip the annotated methods.
--keepclassmembers class de.tankradar.app.DownloadBridge {
-    @android.webkit.JavascriptInterface <methods>;
-}
+# Room and kotlinx.serialization keep what they need through their own rules;
+# nothing in TankRadar is reached only by reflection.

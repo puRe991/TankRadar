@@ -23,7 +23,7 @@ TankRadar is a production-ready Python application that monitors real-time gasol
 - `main.py`: Main entry point
 - `config.py`: Configuration and station settings
 - `data_collector.py`: Legacy Tankerkönig-API collector, superseded by `adac_scraper.py`; not used by `main.py`
-- `android/`: Native Android client for the dashboard (see `android/README.md`)
+- `android/`: Standalone Android app — scrapes, stores and forecasts entirely on the phone (see `android/README.md`)
 - `tools/generate_icons.py`: Regenerates the app icons in `assets/icons/`
 
 ## Setup
@@ -75,20 +75,26 @@ Weitere Schritte stehen in `RELEASE_CHECKLIST.md`.
 
 ## Android
 
-Das Dashboard ist für Smartphones aufbereitet: Es bringt einen Viewport-Meta-Tag,
-ein responsives Layout mit einklappbarer Seitenleiste, Touch-taugliche Bedienelemente
-und ein Web-App-Manifest mit Service Worker mit.
+Unter `android/` liegt eine **eigenständige Android-App**. Sie braucht weder einen
+TankRadar-Server noch einen eingeschalteten PC: Preisabruf, Datenbank, Prognose und
+PDF-Export laufen vollständig auf dem Telefon.
 
-**Variante 1 – als PWA (ohne Installation einer APK):** TankRadar auf dem Rechner mit
+- Kotlin, Jetpack Compose, Room, WorkManager — Preisabruf direkt beim ADAC
+- Preisliste mit Favoriten, 30-Tage-Verlauf, 24-h-Tankzeit-Prognose
+- Tank-Tagebuch und Preis-Prüffälle inklusive PDF-Export in den Downloads-Ordner
+- Alle Daten bleiben auf dem Gerät
+
+Die Prognose nutzt dort das *Adaptive Tagesmuster* statt Prophet, das auf Android nicht
+lauffähig ist — dasselbe Modell, auf das die Python-Version auf 32-Bit-Windows zurückfällt.
+Build-Anleitung, Aufbau und der genaue Prüfstand stehen in `android/README.md`.
+
+### Dashboard auf dem Handy (ohne App)
+
+Unabhängig davon ist das Dash-Dashboard mobiltauglich: Viewport-Meta-Tag, responsives
+Layout mit einklappbarer Seitenleiste, Touch-taugliche Bedienelemente sowie ein
+Web-App-Manifest mit Service Worker. TankRadar auf dem Rechner mit
 `TANKRADAR_DASH_HOST=0.0.0.0` starten, im Chrome des Handys `http://<rechner-ip>:8050`
-öffnen und über das Browser-Menü „Zum Startbildschirm hinzufügen“ wählen. Die Oberfläche
-startet danach im Vollbild mit eigenem Icon.
-
-**Variante 2 – native App:** Unter `android/` liegt ein vollständiges Android-Studio-Projekt
-(Kotlin, WebView-Client). Es ergänzt Pull-to-Refresh, Zurück-Navigation, einen
-verständlichen Offline-Bildschirm und – wichtig – einen funktionierenden PDF-Export;
-Dashs `blob:`-Downloads lösen in einem WebView sonst nichts aus. Details, Build-Anleitung
-und Sicherheitshinweise stehen in `android/README.md`.
+öffnen und „Zum Startbildschirm hinzufügen“ wählen.
 
 > Mit `TANKRADAR_DASH_HOST=0.0.0.0` ist das Dashboard unverschlüsselt und ohne
 > Anmeldung für alle Geräte im selben Netzwerk erreichbar. Nur in vertrauenswürdigen

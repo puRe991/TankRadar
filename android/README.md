@@ -1,107 +1,90 @@
 # TankRadar für Android
 
-Dieses Verzeichnis enthält die native Android-App zu TankRadar.
+Eine eigenständige Android-App. Sie braucht **keinen Server und keinen PC** — Preisabruf,
+Datenbank, Prognose und PDF-Export laufen vollständig auf dem Telefon.
 
-## Was die App ist – und was nicht
+## Was die App kann
 
-TankRadar besteht aus einem Python-Backend (Scraper, SQLite/PostgreSQL, Prophet-Prognose)
-und einem Dash-Frontend. Dieser Stack läuft nicht auf einem Telefon. Die Android-App ist
-deshalb ein **Client für deine eigene TankRadar-Installation**: Sie zeigt das Dashboard des
-Rechners an, auf dem TankRadar läuft, und ergänzt es um das, was ein Browser-Tab nicht kann:
+| Bereich | Umsetzung |
+| --- | --- |
+| **Preise** | Ruft die Preise für E5, E10, Super Plus und Diesel direkt beim ADAC ab, für eine PLZ und einen einstellbaren Umkreis. Liste nach Preis sortiert, günstigste Tankstelle markiert, Favoriten, 24-h-Trendlinie je Karte, Pull-to-Refresh. |
+| **Verlauf & Prognose** | 30-Tage-Verlauf als Diagramm plus 24-h-Prognose mit empfohlener Tankzeit. |
+| **Tank-Tagebuch** | Tankvorgänge erfassen, Monatsausgaben, getankte Menge, mengengewichteter Durchschnittspreis. |
+| **Preis-Prüffälle** | Tatsächliche Preisänderungen nach 12:00 Uhr der letzten 30 Tage, exportierbar als PDF im Ordner „Downloads“. |
+| **Hintergrund** | Aktualisiert die Preise per WorkManager in einstellbarem Intervall — auch nach Neustart des Geräts. |
+| **Einstellungen** | PLZ, Umkreis, bevorzugte Kraftstoffart, Aktualisierungsintervall, Aufbewahrungsdauer des Verlaufs. |
 
-- eigenes Launcher-Icon und Vollbild ohne Browser-Adressleiste
-- Pull-to-Refresh und Hardware-Zurück-Taste
-- funktionierender PDF-Export (siehe *Downloads* unten)
-- verständlicher Offline-Zustand statt Chromes Dino-Seite
-- Server-Adresse einmal eintragen statt jedes Mal eine IP zu tippen
+Alle Daten bleiben auf dem Gerät. Die App spricht ausschließlich mit dem ADAC-Endpunkt;
+es gibt keinen TankRadar-Server, kein Konto und keine Übertragung an Dritte.
 
-Scraping, Datenbank und Prognose bleiben auf dem Server. Ohne laufenden TankRadar-Server
-zeigt die App nur den Offline-Bildschirm.
+## Unterschiede zur Desktop-Version
 
-**Alternative ohne App:** Das Dashboard ist inzwischen auch eine installierbare PWA. Über
-Chrome auf dem Handy → Menü → „Zum Startbildschirm hinzufügen“ bekommst du Icon und
-Vollbild ohne APK. Die App lohnt sich vor allem wegen des PDF-Exports und des
-Offline-Bildschirms.
-
-## Server vorbereiten
-
-Standardmäßig lauscht TankRadar nur auf `127.0.0.1` und ist damit vom Handy aus nicht
-erreichbar. Auf dem Rechner, der TankRadar ausführt:
-
-```bash
-# .env im TankRadar-Verzeichnis
-TANKRADAR_DASH_HOST=0.0.0.0
-TANKRADAR_NATIVE_WINDOW=false   # optional: kein Desktop-Fenster, nur Server
-```
-
-Danach TankRadar neu starten und die lokale IP des Rechners ermitteln
-(`ipconfig` unter Windows, `ip addr` unter Linux). Die Adresse lautet dann z.B.
-`192.168.1.20:8050`.
-
-> **Sicherheitshinweis:** Mit `0.0.0.0` ist das Dashboard für jedes Gerät im selben
-> Netzwerk erreichbar – unverschlüsselt und ohne Anmeldung. Nutze das nur in einem
-> Netzwerk, dem du vertraust, und gib den Port nicht im Router frei. Für den Zugriff
-> von unterwegs gehört ein VPN oder ein HTTPS-Reverse-Proxy davor; die App
-> akzeptiert dann auch eine `https://`-Adresse.
+- **Prognose:** Prophet braucht eine C++/Stan-Toolchain und läuft nicht auf Android. Die App
+  nutzt das *Adaptive Tagesmuster* — genau das Modell, auf das die Python-Version auf
+  32-Bit-Windows ohnehin zurückfällt. Es lernt die typische Stundenabweichung vom
+  Tagesmedian und gewichtet neuere Daten stärker (Halbwertszeit sieben Tage).
+- **Datenbestand:** Die App startet mit leerer Historie. Prognose und Prüffälle werden
+  erst mit einigen Tagen gesammelter Preise aussagekräftig; für eine Prognose sind
+  mindestens 10 Messwerte je Tankstelle nötig.
+- **Kein Cloud-Sync:** Der CSV-Import aus dem GitHub-Workflow ist nicht enthalten.
+- **Intervall:** Android führt Hintergrundaufgaben frühestens alle 15 Minuten aus und
+  verschiebt sie zur Akkuschonung. Das eingestellte Intervall ist ein Ziel, keine Garantie.
 
 ## Bauen
 
-Voraussetzungen: Android Studio (Ladybug oder neuer) oder ein Android SDK mit JDK 17.
+Voraussetzungen: JDK 17+ und ein Android SDK (Platform 35, Build-Tools 35). Mit Android
+Studio (Ladybug oder neuer) genügt „Open“ auf dem Ordner `android/`.
 
 ```bash
 cd android
-./gradlew assembleDebug        # APK unter app/build/outputs/apk/debug/
-./gradlew :app:testDebugUnitTest
+echo "sdk.dir=/pfad/zum/android-sdk" > local.properties
+
+./gradlew assembleDebug          # app/build/outputs/apk/debug/
+./gradlew testDebugUnitTest      # 34 Unit-Tests
+./gradlew lintDebug
+./gradlew assembleRelease        # unsigniert; zum Verteilen eigenen Key einrichten
 ```
 
-Das Gradle-Wrapper-JAR liegt bewusst nicht im Repository. Beim ersten Öffnen in
-Android Studio wird es erzeugt; auf der Kommandozeile einmalig mit einem lokal
-installierten Gradle 8.9:
+Das Gradle-Wrapper-JAR liegt nicht im Repository. Android Studio erzeugt es beim ersten
+Öffnen; auf der Kommandozeile einmalig mit einem lokal installierten Gradle 8.9:
 
 ```bash
 cd android && gradle wrapper
 ```
 
-Für eine Release-APK wird ein eigener Signing-Key benötigt; `app/build.gradle.kts`
-enthält bewusst keine Keystore-Zugangsdaten.
+`minSdk 29` (Android 10): Der PDF-Export schreibt über MediaStore in den Downloads-Ordner,
+was erst ab API 29 ohne Speicher-Berechtigung möglich ist. `targetSdk`/`compileSdk` 35.
 
-- `minSdk 29` (Android 10). Der PDF-Export schreibt über MediaStore in den
-  Downloads-Ordner, was erst ab API 29 ohne Speicher-Berechtigung möglich ist.
-- `targetSdk 35`, `compileSdk 35`.
+## Aufbau
 
-## Erste Einrichtung auf dem Gerät
+```
+data/remote/AdacClient.kt      ADAC-GraphQL-Abfrage inkl. Paging und Retry
+data/db/                       Room: Stationen, Preise, Tankvorgänge
+data/PriceRepository.kt        Scrape → Speicherung → abgeleitete Sichten
+data/Settings.kt               DataStore-Einstellungen
+domain/Forecast.kt             24-h-Prognose (Adaptives Tagesmuster)
+domain/PriceChangeCases.kt     Erkennung der Prüffälle
+domain/ComplaintPdf.kt         PDF-Erzeugung ohne Fremdbibliothek
+work/ScrapeWorker.kt           Periodische Aktualisierung (WorkManager)
+ui/                            Compose-Oberfläche, vier Tabs
+```
 
-Beim ersten Start fragt die App nach der Server-Adresse (`192.168.1.20:8050`).
-Fehlt das Schema, wird `http://` ergänzt; fehlt der Port, wird `8050` angenommen.
-Später ist die Adresse über das Menü in der Toolbar änderbar – nützlich, wenn der
-Rechner per DHCP eine neue IP bekommt.
+Die drei portierten Kernlogiken (`Forecast`, `PriceChangeCases`, `ComplaintPdf`) und das
+Parsen der ADAC-Antwort sind durch Unit-Tests abgedeckt, weil sie die Aussagen der App
+tragen: wann man tanken sollte und was in einem Beschwerde-PDF landet.
 
-## Downloads
+## Was verifiziert ist — und was nicht
 
-Der Button „Beschwerdeanlage als PDF“ erzeugt die Datei über Dashs
-`dcc.Download`-Komponente im Browser und startet sie über einen `blob:`-Link. Ein
-WebView löst dafür **kein** `DownloadListener`-Ereignis aus – ohne Gegenmaßnahme
-würde der Button auf Android also wirkungslos bleiben.
+Im Rahmen der Entwicklung wurden geprüft:
 
-`DownloadBridge` schließt diese Lücke: Nach jedem Seitenaufbau wird JavaScript
-injiziert, das `blob:`- und `data:`-Downloads abfängt, die Daten über eine
-`@JavascriptInterface`-Brücke an Kotlin reicht und dort per MediaStore im
-Downloads-Ordner ablegt. Normale HTTP-Downloads laufen unverändert über den
-System-DownloadManager.
+- `assembleDebug`, `assembleRelease` (inkl. R8) und `lintDebug` laufen fehlerfrei durch;
+  Lint meldet außer Versions-Hinweisen nichts.
+- 34 Unit-Tests grün (Prognosemodell, Prüffall-Erkennung, PDF-Struktur, ADAC-Parsing).
+- Die handgeschriebene SQL-Abfrage für „Station mit aktuellem und vorherigem Preis“ wurde
+  gegen das von Room exportierte Schema in echtem SQLite ausgeführt und liefert die
+  erwarteten Werte, inklusive Stationen ohne Preis für die gewählte Sorte.
 
-## Struktur
-
-| Datei | Zweck |
-| --- | --- |
-| `MainActivity.kt` | WebView-Host: Pull-to-Refresh, Zurück-Navigation, Fehlerzustand, Download-Weiterleitung |
-| `SetupActivity.kt` | Eingabe und Änderung der Server-Adresse |
-| `ServerConfig.kt` | Persistenz und Normalisierung der Adresse |
-| `DownloadBridge.kt` | `blob:`/`data:`-Downloads → Downloads-Ordner |
-| `res/xml/network_security_config.xml` | Erlaubt Klartext-HTTP ins lokale Netz (siehe Sicherheitshinweis) |
-
-## Status
-
-Das Projekt ist vollständig und in sich konsistent, wurde in der Entwicklungsumgebung
-dieses Commits aber **nicht kompiliert** – dort war kein Android SDK verfügbar. Der
-erste `./gradlew assembleDebug`-Lauf sollte deshalb bewusst durchgeführt und geprüft
-werden, bevor die App weiterverteilt wird.
+**Nicht verifiziert:** Die App wurde nie auf einem Gerät oder Emulator gestartet — in der
+Entwicklungsumgebung stand keine Hardware-Virtualisierung zur Verfügung. Layout, Navigation,
+der WorkManager-Zeitplan und der echte ADAC-Abruf sind also ungetestet. Der erste Lauf auf
+einem Gerät gehört deshalb bewusst durchgeführt, bevor die App weitergegeben wird.
