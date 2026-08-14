@@ -16,8 +16,8 @@ android {
         // what removes the need for a storage runtime permission.
         minSdk = 29
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "2.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -44,6 +44,15 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+
+    testOptions {
+        unitTests {
+            // AdacClient logs through android.util.Log, which is a stub in plain JVM
+            // tests and would otherwise throw "not mocked" on any error path.
+            isReturnDefaultValues = true
+            all { test -> test.systemProperties(System.getProperties().toMap() as Map<String, Any>) }
+        }
     }
 }
 

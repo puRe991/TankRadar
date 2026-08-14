@@ -11,6 +11,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -88,27 +89,7 @@ class AdacClient(
         distanceKm: Int,
         page: Int,
     ): JsonObject {
-        val variables = "{\"stationsFilter\":{\"query\":\"${plz.jsonEscaped()}\"," +
-            "\"distance\":$distanceKm,\"pageNumber\":$page," +
-            "\"fuelType\":\"${fuelType.adacName}\",\"sort\":\"PRICE_ASC\"}}"
-        val extensions =
-            "{\"persistedQuery\":{\"version\":1,\"sha256Hash\":\"$PERSISTED_QUERY_HASH\"}}"
-
-        val url = BFF_URL.toHttpUrl().newBuilder()
-            .addQueryParameter("operationName", "FuelStationsFinder")
-            .addQueryParameter("variables", variables)
-            .addQueryParameter("extensions", extensions)
-            .build()
-
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", USER_AGENT)
-            .header("Accept", "application/json")
-            .header("Accept-Language", "de-DE,de;q=0.9")
-            .header("x-portal-env", "prod")
-            .header("Referer", "https://www.adac.de/verkehr/tanken-kraftstoff-antrieb/kraftstoffpreise/")
-            .header("Origin", "https://www.adac.de")
-            .build()
+        val request = buildRequest(plz, fuelType, distanceKm, page)
 
         var lastError: IOException? = null
         for (attempt in 1..MAX_RETRIES) {
@@ -199,6 +180,42 @@ class AdacClient(
         }
 
         private fun String.jsonEscaped(): String = replace("\\", "\\\\").replace("\"", "\\\"")
+
+        fun buildUrl(plz: String, fuelType: FuelType, distanceKm: Int, page: Int): HttpUrl {
+            val variables = "{\"stationsFilter\":{\"query\":\"${plz.jsonEscaped()}\"," +
+                "\"distance\":$distanceKm,\"pageNumber\":$page," +
+                "\"fuelType\":\"${fuelType.adacName}\",\"sort\":\"PRICE_ASC\"}}"
+            val extensions =
+                "{\"persistedQuery\":{\"version\":1,\"sha256Hash\":\"$PERSISTED_QUERY_HASH\"}}"
+
+            return BFF_URL.toHttpUrl().newBuilder()
+                .addQueryParameter("operationName", "FuelStationsFinder")
+                .addQueryParameter("variables", variables)
+                .addQueryParameter("extensions", extensions)
+                .build()
+        }
+
+        /**
+         * Build one page request.
+         *
+         * The `Content-Type` header is load-bearing even though this is a GET with
+         * no body: without it the endpoint answers every request with HTTP 400.
+         * That is why `adac_scraper.py` sends it too. Do not "clean it up".
+         *
+         * `Accept-Encoding` is deliberately absent: OkHttp adds `gzip` itself and
+         * then decompresses transparently, whereas setting it by hand would hand
+         * back raw gzip bytes.
+         */
+        fun buildRequest(plz: String, fuelType: FuelType, distanceKm: Int, page: Int): Request =
+            Request.Builder()
+                .url(buildUrl(plz, fuelType, distanceKm, page))
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json")
+                .header("Accept-Language", "de-DE,de;q=0.9")
+                .header("Content-Type", "application/json")
+                .header("x-portal-env", "prod")
+                .header("Referer", "https://www.adac.de/verkehr/tanken-kraftstoff-antrieb/kraftstoffpreise/")
+                .build()
 
         /** Exposed for tests: parse one BFF payload without performing a request. */
         fun parseStationsForTest(payload: String): List<AdacStation> {

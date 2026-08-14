@@ -40,7 +40,7 @@ cd android
 echo "sdk.dir=/pfad/zum/android-sdk" > local.properties
 
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/
-./gradlew testDebugUnitTest      # 34 Unit-Tests
+./gradlew testDebugUnitTest      # 41 Unit-Tests (offline)
 ./gradlew lintDebug
 ./gradlew assembleRelease        # unsigniert; zum Verteilen eigenen Key einrichten
 ```
@@ -79,12 +79,34 @@ Im Rahmen der Entwicklung wurden geprüft:
 
 - `assembleDebug`, `assembleRelease` (inkl. R8) und `lintDebug` laufen fehlerfrei durch;
   Lint meldet außer Versions-Hinweisen nichts.
-- 34 Unit-Tests grün (Prognosemodell, Prüffall-Erkennung, PDF-Struktur, ADAC-Parsing).
+- 41 Unit-Tests grün (Prognosemodell, Prüffall-Erkennung, PDF-Struktur, ADAC-Parsing und
+  der Aufbau des ADAC-Requests).
+- **Echter ADAC-Abruf** über den produktiven OkHttp-Client: alle vier Kraftstoffarten
+  liefern Stationen mit plausiblen Preisen (`AdacLiveTest`, siehe unten).
 - Die handgeschriebene SQL-Abfrage für „Station mit aktuellem und vorherigem Preis“ wurde
   gegen das von Room exportierte Schema in echtem SQLite ausgeführt und liefert die
   erwarteten Werte, inklusive Stationen ohne Preis für die gewählte Sorte.
 
+Den Live-Test gegen den ADAC-Endpunkt ausführen:
+
+```bash
+./gradlew :app:testDebugUnitTest -Dtankradar.liveAdac=true --rerun-tasks
+```
+
+Er ist ohne dieses Flag übersprungen, damit der normale Build offline bleibt. Lohnt sich
+immer dann, wenn am Request oder am Persisted-Query-Hash etwas geändert wurde.
+
 **Nicht verifiziert:** Die App wurde nie auf einem Gerät oder Emulator gestartet — in der
-Entwicklungsumgebung stand keine Hardware-Virtualisierung zur Verfügung. Layout, Navigation,
-der WorkManager-Zeitplan und der echte ADAC-Abruf sind also ungetestet. Der erste Lauf auf
-einem Gerät gehört deshalb bewusst durchgeführt, bevor die App weitergegeben wird.
+Entwicklungsumgebung stand keine Hardware-Virtualisierung zur Verfügung. Layout, Navigation
+und der WorkManager-Zeitplan sind also ungetestet.
+
+### Fallstrick: `Content-Type` beim ADAC-Request
+
+Der ADAC-Endpunkt beantwortet jede Anfrage **ohne** `Content-Type: application/json` mit
+HTTP 400 — obwohl es ein GET ohne Body ist. `adac_scraper.py` sendet den Header seit jeher,
+in der ersten Android-Fassung fehlte er, und das war die Ursache des 400-Fehlers.
+
+Die Fehlersuche ist zusätzlich heikel, weil vor dem Endpunkt eine CloudFront-Instanz steht:
+Ein bereits gecachter Request liefert 200 zurück, egal welche Header man selbst schickt.
+Beim Testen deshalb immer auf `x-cache: Miss from cloudfront` achten oder eine PLZ nehmen,
+die länger nicht abgefragt wurde — sonst misst man den Cache und nicht den Server.
