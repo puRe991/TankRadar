@@ -119005,3 +119005,15 @@ id,station_id,timestamp,fuel_type,price,latitude,longitude,previous_price
 2026-08-27T14:37:23,1238450,ARAL Wettenberg,ARAL,Wettenberg,diesel,2.219
 2026-08-27T14:37:23,1243122,Jung Bischoffen,Jung,Bischoffen,diesel,2.224
 2026-08-27T14:37:23,1244308,Esso Hohenahr,Esso,Hohenahr,diesel,2.229
+2026-08-27T23:57:36,1239038,Mandler Tank & Wasch Heuchelheim,Mandler Tank & Wasch,Heuchelheim,e5,2.149
+2026-08-27T23:57:36,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e5,2.189
+2026-08-27T23:57:36,1238450,ARAL Wettenberg,ARAL,Wettenberg,e5,2.189
+2026-08-27T23:57:36,1239038,Mandler Tank & Wasch Heuchelheim,Mandler Tank & Wasch,Heuchelheim,e10,2.089
+2026-08-27T23:57:36,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e10,2.129
+2026-08-27T23:57:36,1238450,ARAL Wettenberg,ARAL,Wettenberg,e10,2.129
+2026-08-27T23:57:36,1239038,Mandler Tank & Wasch Heuchelheim,Mandler Tank & Wasch,Heuchelheim,e5p,2.089
+2026-08-27T23:57:36,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e5p,2.129
+2026-08-27T23:57:36,1238450,ARAL Wettenberg,ARAL,Wettenberg,e5p,2.129
+2026-08-27T23:57:36,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,diesel,2.149
+2026-08-27T23:57:36,1239038,Mandler Tank & Wasch Heuchelheim,Mandler Tank & Wasch,Heuchelheim,diesel,2.149
+2026-08-27T23:57:36,1238450,ARAL Wettenberg,ARAL,Wettenberg,diesel,2.169
