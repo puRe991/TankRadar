@@ -122239,3 +122239,27 @@ id,station_id,timestamp,fuel_type,price,latitude,longitude,previous_price
 2026-09-08T08:00:27,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,diesel,2.279
 2026-09-08T08:00:27,1238450,ARAL Wettenberg,ARAL,Wettenberg,diesel,2.279
 2026-09-08T08:00:27,1244308,Esso Hohenahr,Esso,Hohenahr,diesel,2.299
+2026-09-08T12:50:12,1239038,Mandler Tank & Wasch Heuchelheim,Mandler Tank & Wasch,Heuchelheim,e5,2.319
+2026-09-08T12:50:12,1806060,Q1 Lollar,Q1,Lollar,e5,2.329
+2026-09-08T12:50:12,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e5,2.349
+2026-09-08T12:50:12,1238450,ARAL Wettenberg,ARAL,Wettenberg,e5,2.359
+2026-09-08T12:50:12,1244308,Esso Hohenahr,Esso,Hohenahr,e5,2.359
+2026-09-08T12:50:12,1235075,ARAL Lahnau,ARAL,Lahnau,e5,2.369
+2026-09-08T12:50:12,1239038,Mandler Tank & Wasch Heuchelheim,Mandler Tank & Wasch,Heuchelheim,e10,2.259
+2026-09-08T12:50:12,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e10,2.289
+2026-09-08T12:50:12,1806060,Q1 Lollar,Q1,Lollar,e10,2.299
+2026-09-08T12:50:12,1238450,ARAL Wettenberg,ARAL,Wettenberg,e10,2.299
+2026-09-08T12:50:12,1244308,Esso Hohenahr,Esso,Hohenahr,e10,2.299
+2026-09-08T12:50:12,1235075,ARAL Lahnau,ARAL,Lahnau,e10,2.309
+2026-09-08T12:50:12,1239038,Mandler Tank & Wasch Heuchelheim,Mandler Tank & Wasch,Heuchelheim,e5p,2.259
+2026-09-08T12:50:12,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,e5p,2.289
+2026-09-08T12:50:12,1806060,Q1 Lollar,Q1,Lollar,e5p,2.299
+2026-09-08T12:50:12,1238450,ARAL Wettenberg,ARAL,Wettenberg,e5p,2.299
+2026-09-08T12:50:12,1244308,Esso Hohenahr,Esso,Hohenahr,e5p,2.299
+2026-09-08T12:50:12,1235075,ARAL Lahnau,ARAL,Lahnau,e5p,2.309
+2026-09-08T12:50:12,1239038,Mandler Tank & Wasch Heuchelheim,Mandler Tank & Wasch,Heuchelheim,diesel,2.289
+2026-09-08T12:50:12,1806060,Q1 Lollar,Q1,Lollar,diesel,2.339
+2026-09-08T12:50:12,1238016,Mengin Lollar-Odenhausen,Mengin,Lollar-Odenhausen,diesel,2.349
+2026-09-08T12:50:12,1238450,ARAL Wettenberg,ARAL,Wettenberg,diesel,2.349
+2026-09-08T12:50:12,1244308,Esso Hohenahr,Esso,Hohenahr,diesel,2.349
+2026-09-08T12:50:12,1235075,ARAL Lahnau,ARAL,Lahnau,diesel,2.359
