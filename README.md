@@ -9,6 +9,12 @@ TankRadar is a production-ready Python application that monitors real-time gasol
 - **Historical Analysis**: Stores and analyzes price trends with statistical insights
 - **Interactive Dashboard**: Visualize prices, trends, and predictions with Dash/Plotly
 
+## Tank-Tagebuch als Android-App
+
+Das Tank-Tagebuch gibt es auch als eigenständige Android-App: APK unter
+[`downloads/TankTagebuch.apk`](downloads/TankTagebuch.apk), Quellcode und Details in
+[`android/`](android/README.md).
+
 ## Project Structure
 
 - `adac_scraper.py`: Scheduled ADAC price scraping used by `main.py`
